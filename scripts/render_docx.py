@@ -25,6 +25,62 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
+# 中文弯引号
+LQ = '\u201c'  # “
+RQ = '\u201d'  # ”
+
+
+def fix_quotes_in_text(text):
+    """把直引号 \" 正确配对成弯引号 “”。
+    规则：从左到右扫描，奇数位引号变左引号 “，偶数位变右引号 ”。
+    只处理直引号 \"，不动已有的弯引号。
+    """
+    result = []
+    quote_count = 0
+    for ch in text:
+        if ch == '"':
+            if quote_count % 2 == 0:
+                result.append(LQ)
+            else:
+                result.append(RQ)
+            quote_count += 1
+        else:
+            result.append(ch)
+    return ''.join(result)
+
+
+def fix_quotes_in_paragraph(p):
+    """修正段落里所有 run 的直引号配对。
+    跨 run 的引号也要配对，所以先合并文本计数，再按 run 分配。
+    跳过含脚注引用等特殊元素的 run（它们没有可改的文本）。
+    """
+    # 只收集有纯文本的 run，记录它们的引号顺序
+    text_runs = [r for r in p.runs if r.text and '"' in r.text]
+    if not text_runs:
+        return
+    # 检查是否有脚注引用等特殊元素，如果有则谨慎处理：逐 run 修复
+    # 简单情况：所有 run 都是纯文本，全局配对
+    has_special = any(r._element.find('.//{*}footnoteReference') is not None for r in p.runs)
+    if not has_special:
+        full = ''.join(r.text for r in p.runs if r.text)
+        if '"' not in full:
+            return
+        new_full = fix_quotes_in_text(full)
+        # 按原各 run 长度切分（只用有 text 的 run）
+        text_runs_only = [r for r in p.runs if r.text]
+        lengths = [len(r.text) for r in text_runs_only]
+        pos = 0
+        for i, r in enumerate(text_runs_only):
+            n = lengths[i]
+            r.text = new_full[pos:pos+n]
+            pos += n
+    else:
+        # 含脚注引用：逐 run 独立配对（每个 run 内部自配对）
+        # 这样不会跨 run 错位，但单个 run 内引号能正确配对
+        for r in text_runs:
+            if '"' in r.text:
+                r.text = fix_quotes_in_text(r.text)
+
 
 def set_run_font(run, latin, east, size, bold=False):
     """设置 run 字体并强制黑色。"""
@@ -205,6 +261,10 @@ def format_document(doc, line_spacing=1.5):
             p.paragraph_format.space_after = Pt(0)
             for r in p.runs:
                 set_run_font(r, 'Times New Roman', '宋体', 12)
+
+        # 修正引号配对（正文、小标题、First Paragraph 都修；参考文献条目不动）
+        if not (text.startswith('[') and ']' in text[:6]):
+            fix_quotes_in_paragraph(p)
 
     for i in reversed(to_remove):
         el = doc.paragraphs[i]._element
