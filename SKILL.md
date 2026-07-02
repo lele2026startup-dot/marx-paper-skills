@@ -115,7 +115,7 @@ python scripts/render_docx.py 临时.docx 成品.docx --line-spacing 1.5
 
 **圈码脚注 ①②③——已解决**：用 `customMarkFollows="true"` 方案。在正文每个 `w:footnoteReference` 上加该属性，并在 run 里写入圈码字符 `<w:t>①</w:t>`，Word 就显示我们指定的字符而非自动编号。底部脚注的 `w:footnoteRef` 同步替换成圈码字符（不加 FootnoteReference 样式，避免上标变小）。`w:id` 关联保留，仍是真脚注（删正文标记，底部脚注跟随消失）。由 `scripts/footnote_circle_marks.py` 实现。
 
-**每页重新编号——已解决**：用 LibreOffice headless 把 docx 转 PDF，再用 pdfplumber 扫描每个圈码出现在哪一页，按页分组后每页内按出现顺序重新赋 ①②③。由 `scripts/renumber_footnotes_per_page.py` 实现。依赖 LibreOffice 和 pdfplumber。注意：编号是渲染时算死的，不是实时自动的——用户在 Word 里手动新增脚注后需重跑脚本。这与本项目工作流（markdown 改 → 脚本渲染 → 交最终版）匹配。
+**每页重新编号——已解决**：用 Word/WPS 的 COM 接口（pywin32）打开 docx，调用 `Footnote.Reference.Information(wdActiveEndPageNumber)` 获取每个脚注引用在 Word 里的真实页码，按页分组后每页内按出现顺序重新赋 ①②③。由 `scripts/renumber_footnotes_per_page.py` 实现。**重要：必须用 Word COM 而非 LibreOffice 转 PDF**——LibreOffice 与 Word 的分页算法不同，用 LibreOffice 的分页去编号会导致 Word 打开时编号错位。依赖 pywin32 + Word 或 WPS（任一即可，COM 接口通用）。编号是渲染时算死的，不是实时自动的——用户在 Word 里手动新增脚注后需重跑脚本。这与本项目工作流（markdown 改 → 脚本渲染 → 交最终版）匹配。
 
 **pandoc 脚注 ID 偏移**：pandoc 从 markdown 的 YAML frontmatter 会预留一些内部脚注 ID，导致正文脚注的 XML ID 不是从 1 开始（如从 9 开始）。这不影响圈码显示（圈码是我们按出现顺序算的，与 XML ID 无关），但开发调试时要心里有数。
 
