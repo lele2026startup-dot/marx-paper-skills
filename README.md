@@ -105,7 +105,7 @@
 - **结构规律来自顶刊样本**：《马克思主义研究》25-26 年 200+ 篇统计，3 大标题主流（54%）、4 大（31%）、5 大（11%）；约 73% 无结语
 - **大标题起法四种**：递进式排比（最常见，默认先用）、概念-展开式（冒号）、从X到Y、直接陈述
 - **小标题起法两种**：冒号式拆解、从X到Y式
-- **6 个方向各 1 个典型样本**附在 skill 里供对照
+- **6 个方向各 5 个完整样本**存于 `references/structure-samples.md`（共30篇，每篇列全大小标题）
 
 ## marx-paper-write 详解
 
@@ -136,7 +136,9 @@ marx-paper-skills/
 └── marx-paper-research/                素材整理 skill（雏形）
     └── SKILL.md
 └── marx-paper-structure/               结构搭建 skill（雏形）
-    └── SKILL.md
+    ├── SKILL.md
+    └── references/
+        └── structure-samples.md
 └── marx-paper-write/                   正文写作 skill（雏形）
     └── SKILL.md
 ```
