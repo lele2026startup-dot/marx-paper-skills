@@ -22,13 +22,14 @@
 把马理论科论文写作拆成若干独立环节，每个环节做成一个 skill。各 skill 互相独立又彼此衔接，按需调用。
 
 ```
-选题（topic）→ 找文献 → 定义结构（structure）→ 整理素材（research）→ 写正文（write）→ 格式规范（format）
+marx-paper（总入口路由）→ 选题（topic）→ 找文献 → 定义结构（structure）→ 整理素材（research）→ 写正文（write）→ 审核（review）→ 格式规范（format）
 ```
 
 ## 包含的 skill
 
 | Skill | 状态 | 职责 |
 |-------|------|------|
+| **marx-paper** | 🚧 雏形完成 | 总入口路由：笼统需求走全流程，明确单步需求路由到对应子 skill |
 | **marx-paper-format** | ✅ 已完成 | 脚注圈码 + 每页重编号（一键 pipeline，A全自动/B简单编号两选项）+ GB/T 7714 参考文献 + Word 排版 |
 | **marx-paper-topic** | ✅ 三层完成 | 特征识别 + 情况确认与分流 + 拟题配方；末尾衔接"找文献"（关键词组文件夹预建、MinerU转MD指引） |
 | **marx-paper-research** | 🚧 雏形完成 | 读文献、整理直接引用（按来源含政策文件）+间接引用（按结构部分每篇最多1条）+数据素材，提取完整出处信息 |
@@ -129,6 +130,8 @@
 ```
 marx-paper-skills/
 ├── README.md                           系列总览
+├── marx-paper/                       总入口路由 skill
+│   └── SKILL.md
 ├── marx-paper-format/                  格式规范 skill
 │   ├── SKILL.md
 │   ├── references/
