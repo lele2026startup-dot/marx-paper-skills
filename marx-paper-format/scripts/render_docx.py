@@ -189,6 +189,46 @@ def is_section_heading(text):
     return any(text.startswith(m) for m in markers)
 
 
+import re as _re
+# 参考文献条目开头的编号模式：[1] ［1］ ① 1. 1、 （1） (1)
+# 允许前导空白。旧版只认半角 [ ，遇到全角括号或行首空格就把条目当正文，导致参考文献“挤一块/像正文”。
+_REF_NUM_PAT = _re.compile(
+    r'^\s*(?:\[\d+\]|［\d+］|①|\d+[.、]|\(\d+\)|（\d+）)'
+)
+
+def is_ref_entry(text):
+    """是否为参考文献条目（不是正文）。兼容半角/全角方括号、圈码、数字加点/顿号、圆括号编号，且允许前导空白。"""
+    return bool(_REF_NUM_PAT.match(text))
+
+
+def split_ref_paragraph(p):
+    """若多条参考文献条目被 pandoc 合并成了一段（markdown 里条目间没空行时常见），
+    拆成独立段落并在原段之后插入，返回新段列表。原段保留第一条条目文本。各新段样式由调用者后续赋。"""
+    raw = p.text
+    if not raw:
+        return []
+    parts = _re.split(r'(?=\s*(?:\[\d+\]|［\d+］))', raw)
+    parts = [pt for pt in parts if pt.strip()]
+    if len(parts) <= 1:
+        return []
+    # 清原段 runs，填第 0 条
+    for r in list(p.runs):
+        r._element.getparent().remove(r._element)
+    p.add_run(parts[0].strip())
+    # 用逐条 addnext 在原段后插新段
+    from docx.text.paragraph import Paragraph
+    prev = p._element
+    new_paras = []
+    for t in parts[1:]:
+        new_el = OxmlElement('w:p')
+        prev.addnext(new_el)
+        prev = new_el
+        np = Paragraph(new_el, p._parent)
+        np.add_run(t.strip())
+        new_paras.append(np)
+    return new_paras
+
+
 # 行首要剩掉的开头空白：全角空格 U+3000、半角空格、制表符、中文“换行不缩进”常见填湻
 _LEADING_SPACES = ('\u3000', ' ', '\t')
 
@@ -266,15 +306,19 @@ def format_document(doc, line_spacing=1.5):
             for r in p.runs:
                 set_run_font(r, 'Times New Roman', '黑体', 14, bold=True)
 
-        elif text.startswith('[') and ']' in text[:6]:
-            # 参考文献条目：宋体五号
-            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-            p.paragraph_format.line_spacing = 1.25
-            p.paragraph_format.first_line_indent = Pt(0)
-            p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after = Pt(0)
-            for r in p.runs:
-                set_run_font(r, 'Times New Roman', '宋体', 10.5)
+        elif is_ref_entry(text):
+            # 参考文献条目：宋体五号、左顶格、不缩进。兼容全角方括号/前导空白；
+            # 若多条被 pandoc 合并成一段（条目间没空行），先拆开再统一赋样式。
+            _strip_leading_spaces(p)
+            appended = split_ref_paragraph(p)
+            for _pp in [p] + appended:
+                _pp.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                _pp.paragraph_format.line_spacing = 1.25
+                _pp.paragraph_format.first_line_indent = Pt(0)
+                _pp.paragraph_format.space_before = Pt(0)
+                _pp.paragraph_format.space_after = Pt(0)
+                for r in _pp.runs:
+                    set_run_font(r, 'Times New Roman', '宋体', 10.5)
 
         else:
             # 正文：宋体小四。先剥行首全角/半角空格，避免与 firstLine 缩进叠加成“双倍䴖进”
@@ -289,7 +333,7 @@ def format_document(doc, line_spacing=1.5):
                 set_run_font(r, 'Times New Roman', '宋体', 12)
 
         # 修正引号配对（正文、小标题、First Paragraph 都修；参考文献条目不动）
-        if not (text.startswith('[') and ']' in text[:6]):
+        if not is_ref_entry(text):
             fix_quotes_in_paragraph(p)
 
     for i in reversed(to_remove):

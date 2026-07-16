@@ -108,6 +108,54 @@ def run_renumber(docx_path):
     print("  ✓ 完成")
 
 
+def check_ref_duplicates(docx_path):
+    """参考文献去重校验：打开 docx，把“参考文献”标题后各条按“责任者+题名+版本”归一比对，
+    打印重复项供人工核对（不自动删，只报告）。GB/T 7714 要求同一文献只列一次，
+    人眼容易漏（如同一书不同位置被列为 [1] 和 [5]）。脚本跑一遍把它标出来更稳。"""
+    try:
+        from docx import Document
+        import re
+        doc = Document(str(docx_path))
+    except Exception as e:
+        print("  参考文献去重校验跳过（打不开 docx）")
+        return
+    # 收集“参考文献”标题后出现的条目段
+    entries = []
+    in_refs = False
+    for p in doc.paragraphs:
+        t = p.text.strip()
+        if t == '参考文献':
+            in_refs = True
+            continue
+        if not in_refs:
+            continue
+        # 条目形如 [1] 责任者.题名[...].出版地：出版社，年:页.
+        if re.match(r'^\s*(?:\[\d+\]|［\d+］|①|\d+[.、])', t):
+            # 归一 key：杂编号、页码，只留“责任者+题名+出版社+年”
+            core = re.sub(r'^\s*(?:\[\d+\]|［\d+］|①|\d+[.、])\s*', '', t)
+            # 去掉起止页码 [M]..:1-5 之类末尾页码与句末标点
+            core = re.sub(r':[0-9\-]+\.?\s*$', '', core)
+            core = re.sub(r'[\s。.]+$', '', core)
+            core = core.strip()
+            entries.append((core, t[:60]))
+    if not entries:
+        return
+    seen = {}
+    dups = []
+    for core, disp in entries:
+        if core in seen:
+            dups.append((seen[core], disp))
+        else:
+            seen[core] = disp
+    if dups:
+        print("  ⚠ 参考文献·疑似重复（请人工核对是否同一文献）：")
+        for a, b in dups:
+            print(f"    - {a!r}")
+            print(f"      ∟ {b!r}")
+    else:
+        print("  ✓ 参考文献无重复 (校验通过)")
+
+
 def build(md_path, out_docx, use_circle=True):
     md_path = Path(md_path)
     out_docx = Path(out_docx)
@@ -116,17 +164,26 @@ def build(md_path, out_docx, use_circle=True):
 
     tmp_docx = out_docx.with_suffix(".tmp.docx")
 
-    # 第1步：pandoc
-    run_pandoc(md_path, tmp_docx)
+    try:
+        # 第1步：pandoc
+        run_pandoc(md_path, tmp_docx)
 
-    # 第2步：render_docx
-    run_render(tmp_docx, out_docx)
-    tmp_docx.unlink(missing_ok=True)
+        # 第2步：render_docx
+        run_render(tmp_docx, out_docx)
+    finally:
+        # 兜底清理 .tmp.docx：无论成功失败都删，避免残留让用户困惑（“V2.tmp 是什么”）
+        try:
+            tmp_docx.unlink(missing_ok=True)
+        except Exception:
+            pass
 
     if use_circle:
         # 第3、4步：圈码化 + 每页重编号
         run_circle_marks(out_docx)
         run_renumber(out_docx)
+
+    # 第5步：参考文献去重校验（dry-run 报告，不改文件）
+    check_ref_duplicates(out_docx)
 
     print(f"\n✅ 全部完成: {out_docx}")
     if not use_circle:
