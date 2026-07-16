@@ -34,7 +34,7 @@ description: |
 | marx-paper-structure | 定结构：先给工整排比式一版，不满意再给其他思路 |
 | marx-paper-research | 整理素材：直接引用/间接引用/数据，提取出处信息 |
 | marx-paper-quickwrite | 写正文（快速式）：一气呵成写完整篇，十种写作方法 + 写作规范 |
-| marx-paper-cowrite | 写正文（引导式）：和用户共写，引导先读哪篇、提问题收思想、再写 |
+| marx-paper-cowrite | 写正文（引导式）：一段一段和用户共写，每段先问启发、收用户想法、结合阅读思考落笔 |
 | marx-paper-review | 审核：独立 agent 系统检查，列问题给建议 |
 | marx-paper-format | 排版：脚注圈码 + 每页重编号 + GB/T 7714 + Word 渲染 |
 
@@ -53,7 +53,7 @@ description: |
 5. **整理素材**（marx-paper-research）→ 读文献，整理直接引用/间接引用/数据，提取完整出处信息
 6. **写正文**（二选一，research 结尾提醒用户选）：
    - **marx-paper-quickwrite**（快速式，一气呵成）→ 我一气写完整篇，快但用户不参与
-   - **marx-paper-cowrite**（引导式，共写）→ 引导用户一篇篇读、提问题收思想、用素材再写，慢但更有灵魂、更贴合用户想法
+   - **marx-paper-cowrite**（引导式，共写）→ 按结构一段一段写，每段先问用户问题启发思考、收用户想法、结合其阅读思考落笔；过目可改、框架在写中可变。慢但更有灵魂、更贴合用户想法
 7. **审核**（marx-paper-review）→ 独立 agent 系统检查，列问题和建议
 8. **排版**（marx-paper-format）→ 脚注圈码 + 每页重编号 + GB/T 7714 参考文献 + Word 渲染
 
