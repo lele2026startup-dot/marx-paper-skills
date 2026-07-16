@@ -189,6 +189,29 @@ def is_section_heading(text):
     return any(text.startswith(m) for m in markers)
 
 
+# 行首要剩掉的开头空白：全角空格 U+3000、半角空格、制表符、中文“换行不缩进”常见填湻
+_LEADING_SPACES = ('\u3000', ' ', '\t')
+
+def _strip_leading_spaces(p):
+    """剩掉正文段行首的全角/半角空格，避免和脚本设的 firstLine 缩进叠加成“双倍缩进”。
+    只要开头是空白字符就剩下，到一个非空白字符为止。多 run 的情况：把开头空白的 run 清空、
+    部分空白的 run 剩掉空白。"""
+    for r in p.runs:
+        if not r.text:
+            continue
+        # 剩掉这个 run 开头的空白
+        new = r.text.lstrip(''.join(_LEADING_SPACES))
+        if new == r.text:
+            # 这个 run 开头没空白，说明行首已过，停止
+            return
+        r.text = new
+        if new == '':
+            # 整个 run 都是空白，继续看下一个 run
+            continue
+        # 剩了部分后这个 run 还有内容，行首处理完了
+        return
+
+
 def format_document(doc, line_spacing=1.5):
     title_text = None
     for p in doc.paragraphs:
@@ -234,9 +257,10 @@ def format_document(doc, line_spacing=1.5):
                 set_run_font(r, 'Times New Roman', '黑体', 14, bold=True)
 
         elif style.startswith('Heading 2') or is_section_heading(text):
+            # 小标题：左顶格、黑体，不首行缩进
             p.alignment = WD_ALIGN_PARAGRAPH.LEFT
             p.paragraph_format.line_spacing = line_spacing
-            p.paragraph_format.first_line_indent = Pt(24)
+            p.paragraph_format.first_line_indent = Pt(0)
             p.paragraph_format.space_before = Pt(12)
             p.paragraph_format.space_after = Pt(6)
             for r in p.runs:
@@ -253,7 +277,9 @@ def format_document(doc, line_spacing=1.5):
                 set_run_font(r, 'Times New Roman', '宋体', 10.5)
 
         else:
-            # 正文：宋体小四
+            # 正文：宋体小四。先剥行首全角/半角空格，避免与 firstLine 缩进叠加成“双倍䴖进”
+            # （草稿中文行首带全角空格是手写习惯，pandoc 会原样保留，再叠加 24pt 缩进视觉上变 4 字符）
+            _strip_leading_spaces(p)
             p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             p.paragraph_format.line_spacing = line_spacing
             p.paragraph_format.first_line_indent = Pt(24)
