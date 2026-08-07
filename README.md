@@ -34,6 +34,7 @@ marx-paper（总入口路由，先说清系列默认设定，可选本次任务�
 | **marx-paper-journal-format** | ✅ 已完成 | 排版（期刊投稿式）：顺序编码真尾注 + 文中上标[N] + 一文一引自动重编号 + 内置双栏期刊模板（或按用户模板）+ 自动自检 |
 | **marx-paper-topic** | ✅ 已完成 | 特征识别 + 情况确认与分流 + 拟题配方；末尾衔接"找文献"（关键词组文件夹预建、MinerU转MD指引） |
 | **marx-paper-research** | ✅ 已完成 | 读文献、整理直接引用（按来源含政策文件）+间接引用（按结构部分每篇最多1条）+数据素材，提取完整出处信息 |
+| **marx-paper-material** | ✅ 已完成 | 材料检索入库：找文献全文（经典著作/政策文件/讲话等）→ 抓取清洗（GB18030 防乱码）→ TXT+规范排版 Word 双格式 → 按库约定建文件夹归档 + 同步 SOT |
 | **marx-paper-structure** | ✅ 已完成 | 搭结构：先给工整排比式一版，不满意再给两三个其他思路；定稿落盘成结构方案_V1.md |
 | **marx-paper-quickwrite** | ✅ 已完成 | 写正文（快速式·一气写整篇）：十种写作方法 + 写作规范（不被研究资料文风带偏/克制AI句式/指名红线/引号逐字/贵精不贵多） |
 | **marx-paper-cowrite** | ✅ 已完成 | 写正文（引导式·和用户共写）：一段一段写，每段先问启发、收用户想法、结合阅读思考落笔，过目可改、框架可变 |
@@ -207,6 +208,13 @@ marx-paper-skills/
 │       └── structure-samples.md
 ├── marx-paper-research/                素材整理 skill
 │   └── SKILL.md
+├── marx-paper-material/                 材料检索入库 skill
+│   ├── SKILL.md
+│   ├── references/
+│   │   └── sources.md                  来源路由表+编码规则+踩坑清单
+│   └── scripts/
+│       ├── fetch_text.py               抓取清洗（编码探测/正文提取/乱码校验）
+│       └── format_docx.py              TXT→规范排版 Word（批量幂等零删除）
 ├── marx-paper-quickwrite/               正文写作 skill（快速式）
 │   └── SKILL.md
 ├── marx-paper-cowrite/                  正文写作 skill（引导式，一段一段和用户共写）
