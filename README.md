@@ -15,14 +15,14 @@
 | 5 | 马克思主义发展史 |
 | 6 | 中国近现代史基本问题研究 |
 
-适用于这六个方向下纯文科、无实证、纯文字性的课程论文、期末论文、学位论文。
+适用于这六个方向下纯文科、无实证、纯文字性的课程论文、期末论文、学位论文，以及期刊/征文投稿论文。
 
 ## 设计理念
 
 把马理论科论文写作拆成若干独立环节，每个环节做成一个 skill。各 skill 互相独立又彼此衔接，按需调用。
 
 ```
-marx-paper（总入口路由，先说清系列默认设定，可选本次任务调整不改 skill）→ 选题（topic）→ 找文献 →（可选：阅读报告 read）→ 定义结构（structure）→ 整理素材（research）→ 写正文（quickwrite 快速式 / cowrite 引导式，二选一）→ 审核（review）→ 格式规范（format）
+marx-paper（总入口路由，先说清系列默认设定，可选本次任务调整不改 skill）→ 选题（topic）→ 找文献 →（可选：阅读报告 read）→ 定义结构（structure）→ 整理素材（research）→ 写正文（quickwrite 快速式 / cowrite 引导式，二选一）→ 审核（review）→ 排版（thesis-format 学位论文/课程论文式 / journal-format 期刊投稿式，按场景二选一）
 ```
 
 ## 包含的 skill
@@ -30,7 +30,8 @@ marx-paper（总入口路由，先说清系列默认设定，可选本次任务�
 | Skill | 状态 | 职责 |
 |-------|------|------|
 | **marx-paper** | ✅ 已完成 | 总入口路由：笼统需求走全流程，明确单步需求路由到对应子 skill |
-| **marx-paper-format** | ✅ 已完成 | 脚注圈码 + 每页重编号（一键 pipeline，A全自动/B简单编号两选项）+ GB/T 7714 参考文献 + Word 排版 |
+| **marx-paper-thesis-format** | ✅ 已完成 | 排版（学位论文/课程论文式）：页下注圈码 + 每页重编号（一键 pipeline，A全自动/B简单编号两选项）+ GB/T 7714 参考文献 + Word 排版 |
+| **marx-paper-journal-format** | ✅ 已完成 | 排版（期刊投稿式）：顺序编码真尾注 + 文中上标[N] + 一文一引自动重编号 + 内置双栏期刊模板（或按用户模板）+ 自动自检 |
 | **marx-paper-topic** | ✅ 已完成 | 特征识别 + 情况确认与分流 + 拟题配方；末尾衔接"找文献"（关键词组文件夹预建、MinerU转MD指引） |
 | **marx-paper-research** | ✅ 已完成 | 读文献、整理直接引用（按来源含政策文件）+间接引用（按结构部分每篇最多1条）+数据素材，提取完整出处信息 |
 | **marx-paper-structure** | ✅ 已完成 | 搭结构：先给工整排比式一版，不满意再给两三个其他思路；定稿落盘成结构方案_V1.md |
@@ -39,9 +40,9 @@ marx-paper（总入口路由，先说清系列默认设定，可选本次任务�
 | **marx-paper-read** | ✅ 已完成 | （可选/跳过）文献阅读报告：三问骨架读懂关键文献，为定结构和写作打基础，也为 cowrite 提供“先读哪篇”依据 |
 | **marx-paper-review** | ✅ 已完成 | 独立 agent 审核：系统检查溯源/字数/引用/语体等，列问题给建议，不自己改 |
 
-## marx-paper-format 详解
+## marx-paper-thesis-format 详解（学位论文/课程论文式排版）
 
-把马理论科论文草稿（markdown 或 docx）加工成格式规范、可直接提交的 Word 文档。
+把马理论科论文草稿（markdown 或 docx）加工成格式规范、可直接提交的 Word 文档。适用于课程论文、期末论文、学位论文；期刊/征文投稿用 marx-paper-journal-format。
 
 ### 核心能力
 
@@ -69,6 +70,35 @@ marx-paper（总入口路由，先说清系列默认设定，可选本次任务�
 - [python-docx](https://python-docx.org/) — docx XML 操作
 - [pywin32](https://pypi.org/project/pywin32/) — Word/WPS COM 接口（查真实页码）
 - Microsoft Word 或 WPS Office（任一即可）
+
+## marx-paper-journal-format 详解（期刊投稿式排版）
+
+把期刊/征文投稿论文草稿（markdown）加工成符合期刊版式、可直接投稿的 Word 文档。
+
+### 核心能力
+
+- **顺序编码真尾注**：文中上标 `[N]`（endnoteReference 字段，可点击跳转），文末尾注列表，不是纯文本假上标
+- **一文一引**：每篇文献只引一次；重复标注自动保留首次、删后面的，编号按首次出现顺序自动重排，都在脚本报告里
+- **内置双栏期刊模板**：题目/作者/单位/摘要/关键词/中图分类号 → 双栏正文（五号宋体、黑体/楷体分级标题）→ 参考文献 → 英文部分 → 文末作者简介，全套版式；用户有模板就按用户的
+- **参考文献标题不分离**："参考文献"标题做成一条不被引用的尾注，永远紧贴尾注列表
+- **作者简介双处**：第一页页下真脚注 + 文末完整段（含联系方式）
+- **自动自检**：生成后重开文件逐项校验（真尾注数量/无残留[N]/无空条目/上标完整/脚注在位），不通过不交付
+
+### 技术方案（踩坑沉淀，详见其 references/journal-endnotes.md）
+
+| 难题 | 方案 |
+|------|------|
+| 引用号不上标（落在基线） | 每个 run 显式写 vertAlign=superscript |
+| WPS 手改尾注出空条目/乱码 | 方括号内置，不引导用户手改；出问题重跑脚本 |
+| 重复引用不稳定 | 默认一文一引；备用：每位置独立编号+合并显示+vanish 隐藏 |
+| 标题与尾注列表分离 | 标题做成不被引用的尾注 |
+| WPS 重存丢尾注位置设置 | 交付提醒：位置跑了重跑脚本 |
+| 编号变罗马数字 i,ii,iii | settings.xml + 各节 sectPr 都写 numFmt=decimal |
+
+### 依赖
+
+- python-docx、lxml
+- Windows + Word 或 WPS（打开检查用）
 
 ## marx-paper-topic 详解
 
@@ -151,16 +181,22 @@ marx-paper-skills/
 ├── README.md                           系列总览
 ├── marx-paper/                       总入口路由 skill
 │   └── SKILL.md
-├── marx-paper-format/                  格式规范 skill
+├── marx-paper-thesis-format/           排版 skill（学位论文/课程论文式）
 │   ├── SKILL.md
+│   ├── README.md
 │   ├── references/
 │   │   └── gbt7714-format.md
 │   └── scripts/
 │       ├── render_docx.py
 │       ├── build_docx.py               一键 pipeline（pandoc→render→圈码→重编号）
-│       ├── render_docx.py
 │       ├── footnote_circle_marks.py
 │       └── renumber_footnotes_per_page.py
+├── marx-paper-journal-format/          排版 skill（期刊投稿式）
+│   ├── SKILL.md
+│   ├── references/
+│   │   └── journal-endnotes.md         XML 模式+踩坑清单+内置模板规格
+│   └── scripts/
+│       └── build_journal_docx.py       md+meta.json → 双栏期刊版式 docx（含自检）
 ├── marx-paper-topic/                   选题拟题 skill
 │   ├── SKILL.md
 │   └── references/
