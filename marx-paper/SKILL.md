@@ -36,7 +36,8 @@ description: |
 | marx-paper-quickwrite | 写正文（快速式）：一气呵成写完整篇，十种写作方法 + 写作规范 |
 | marx-paper-cowrite | 写正文（引导式）：一段一段和用户共写，每段先问启发、收用户想法、结合阅读思考落笔 |
 | marx-paper-review | 审核：独立 agent 系统检查，列问题给建议 |
-| marx-paper-format | 排版：脚注圈码 + 每页重编号 + GB/T 7714 + Word 渲染 |
+| marx-paper-thesis-format | 排版（学位论文/课程论文式）：页下注圈码 ①②③ + 每页重编号 + GB/T 7714 参考文献表 + Word 渲染 |
+| marx-paper-journal-format | 排版（期刊投稿式）：顺序编码真尾注 + 文中上标[N] + 一文一引 + 内置双栏期刊模板（或按用户提供的期刊模板） |
 
 ## 两种模式
 
@@ -55,7 +56,9 @@ description: |
    - **marx-paper-quickwrite**（快速式，一气呵成）→ 我一气写完整篇，快但用户不参与
    - **marx-paper-cowrite**（引导式，共写）→ 按结构一段一段写，每段先问用户问题启发思考、收用户想法、结合其阅读思考落笔；过目可改、框架在写中可变。慢但更有灵魂、更贴合用户想法
 7. **审核**（marx-paper-review）→ 独立 agent 系统检查，列问题和建议
-8. **排版**（marx-paper-format）→ 脚注圈码 + 每页重编号 + GB/T 7714 参考文献 + Word 渲染
+8. **排版**（二选一，到这一步先问用户场景）：
+   - **marx-paper-thesis-format**（学位论文/课程论文式）→ 页下注圈码 ①②③ + 每页重编号 + GB/T 7714 参考文献表 + Word 渲染。适用于课程论文、期末论文、学位论文
+   - **marx-paper-journal-format**（期刊投稿式）→ 顺序编码真尾注 + 文中上标[N] + 一文一引 + 双栏期刊版式。适用于期刊投稿、研讨会征文、学报投稿
 
 走全流程时，告诉用户这个顺序，让他心里有数。每步完成后自然衔接下一步，不用每次回来问路由 skill。
 
@@ -75,7 +78,9 @@ description: |
 | 想和你一起写、引导式、说"和我一起写""引导我写""你问我我来想""边读边写" | marx-paper-cowrite | 引导式写作，共写 |
 | 要写正文、笼统说"正文怎么写""开始写论文"没指定快写还是引导式 | marx-paper-quickwrite（默认） | 默认快速式；用户要引导式再路由 cowrite |
 | 写完想审核、检查、挑问题、说"帮我审一下""检查一下论文""看看有什么问题""审核一下" | marx-paper-review | 独立 agent 审核，列问题给建议 |
-| 要加脚注、标注引文出处、生成参考文献、转成 word、排版、说"加脚注""排版""转成word""参考文献""GB/T 7714" | marx-paper-format | 脚注圈码+每页重编号+Word 排版 |
+| 要加脚注、标注引文出处、生成参考文献、转成 word、排版、说"加脚注""排版""转成word""参考文献""GB/T 7714""圈码"，场景是课程论文/期末论文/学位论文 | marx-paper-thesis-format | 页下注圈码+每页重编号+Word 排版 |
+| 要投稿期刊/研讨会征文/学报，或要尾注、顺序编码、文中上标[N]、按期刊模板排版，说"投稿""征文""期刊格式""尾注" | marx-paper-journal-format | 顺序编码真尾注+上标[N]+双栏期刊版式 |
+| 只说"排版"没说场景 | 先问一句：是交课程作业/学位论文，还是投稿期刊征文？ | 前者 thesis-format，后者 journal-format |
 
 ## 工作流程
 
@@ -115,8 +120,8 @@ description: |
 
 ```
 marx-paper（路由入口）
-  ├─ 全流程：topic → 找文献 → [read 可选] → structure → research → {quickwrite 或 cowrite} → review → format
-  └─ 单步：  topic / read / structure / research / quickwrite / cowrite / review / format
+  ├─ 全流程：topic → 找文献 → [read 可选] → structure → research → {quickwrite 或 cowrite} → review → {thesis-format 或 journal-format}
+  └─ 单步：  topic / read / structure / research / quickwrite / cowrite / review / thesis-format / journal-format
 ```
 
-写正文到 review 之间，quickwrite 与 cowrite 是并列二选一——research 结尾要提醒用户有两种写法，让他选。
+写正文到 review 之间，quickwrite 与 cowrite 是并列二选一——research 结尾要提醒用户有两种写法，让他选。排版环节 thesis-format 与 journal-format 也是并列二选一——按场景分：交课程作业/学位论文走 thesis-format，投期刊/征文走 journal-format。

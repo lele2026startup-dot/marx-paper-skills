@@ -1,6 +1,6 @@
 ---
 name: marx-paper-review
-description: 帮马克思主义理论一级学科（含马克思主义基本原理、马克思主义中国化研究、思想政治教育、国外马克思主义研究、马克思主义发展史、中国近现代史基本问题研究六个二级方向）的论文做写作完成后的审核。独立 agent 检查正文是否符合系列各 skill 的要求（溯源、指名、字数、每部分有引用、破折号/反问句克制、学科语体等），列出问题和修改建议。在 marx-paper-quickwrite 或 marx-paper-cowrite 写完正文后、marx-paper-format 排版前运行。当用户写完论文需要审核、检查、挑问题、看看符不符合要求，或说帮我审一下、检查一下论文、看看有什么问题、审核一下时，使用此 skill。即使用户没明确说用审核 skill，只要涉及马理论科论文写完后的质量审核，都应触发。
+description: 帮马克思主义理论一级学科（含马克思主义基本原理、马克思主义中国化研究、思想政治教育、国外马克思主义研究、马克思主义发展史、中国近现代史基本问题研究六个二级方向）的论文做写作完成后的审核。独立 agent 检查正文是否符合系列各 skill 的要求（溯源、指名、字数、每部分有引用、破折号/反问句克制、学科语体等），列出问题和修改建议。在 marx-paper-quickwrite 或 marx-paper-cowrite 写完正文后、marx-paper-thesis-format 或 marx-paper-journal-format 排版前运行。当用户写完论文需要审核、检查、挑问题、看看符不符合要求，或说帮我审一下、检查一下论文、看看有什么问题、审核一下时，使用此 skill。即使用户没明确说用审核 skill，只要涉及马理论科论文写完后的质量审核，都应触发。
 ---
 
 # 马克思主义理论学科论文审核
@@ -9,7 +9,7 @@ description: 帮马克思主义理论一级学科（含马克思主义基本原�
 
 写完正文后，自己审自己容易护短——写的人看不出自己的问题。这个 skill 用独立 agent（新上下文）系统过一遍正文，检查是否符合系列各 skill 的要求，列出问题和修改建议。
 
-它在 marx-paper-quickwrite（快速式）或 marx-paper-cowrite（引导式）写完正文后、marx-paper-format 排版前运行。审核通过再排版，避免排版后发现内容问题又返工。
+它在 marx-paper-quickwrite（快速式）或 marx-paper-cowrite（引导式）写完正文后、格式排版（marx-paper-thesis-format 或 marx-paper-journal-format）前运行。审核通过再排版，避免排版后发现内容问题又返工。
 
 ## 审核清单
 
@@ -75,7 +75,7 @@ description: 帮马克思主义理论一级学科（含马克思主义基本原�
 
 审核完后：
 - 有硬伤 → 回到写正文的 skill（marx-paper-quickwrite 或 marx-paper-cowrite）按建议改正文，改完再审一遍
-- 只有建议、无硬伤 → 用户决定改不改，然后衔接 marx-paper-format 排版
+- 只有建议、无硬伤 → 用户决定改不改，然后衔接排版（学位论文/课程论文式 marx-paper-thesis-format，期刊投稿 marx-paper-journal-format）
 
 ## 备注
 

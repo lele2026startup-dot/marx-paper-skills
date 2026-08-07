@@ -115,7 +115,7 @@ cowrite 写出的每一段，遵循的写作规范与 marx-paper-quickwrite 完�
 ## 衔接
 
 - **上游**：marx-paper-research 结尾提醒用户选写法时被选到，或用户明确要引导式时路由到本。理想链路是 marx-paper-read（可选，用户思想先落盘）→ structure → research → 本 skill
-- **下游**：写完进 marx-paper-review 独立审核，再进 marx-paper-format 排版
+- **下游**：写完进 marx-paper-review 独立审核，再进排版（学位论文/课程论文式用 marx-paper-thesis-format，期刊投稿用 marx-paper-journal-format）
 - **跟 quickwrite**：并列二选一，可混用
 
 ## 备注
