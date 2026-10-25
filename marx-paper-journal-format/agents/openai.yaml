@@ -1,0 +1,6 @@
+interface:
+  display_name: "马理论期刊投稿排版"
+  short_description: "把马理论论文排成期刊或会议投稿 Word，支持双栏、真尾注、重复引用交叉引用与用户模板。"
+  default_prompt: "请使用 $marx-paper-journal-format 完成相应任务，并沿用已确认的路径与规则。"
+policy:
+  allow_implicit_invocation: true

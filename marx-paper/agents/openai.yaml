@@ -1,0 +1,6 @@
+interface:
+  display_name: "马理论论文工作流"
+  short_description: "按需求选择马理论论文的选题、阅读、结构、素材、写作、审核与排版环节。"
+  default_prompt: "请使用 $marx-paper 完成相应任务，并沿用已确认的路径与规则。"
+policy:
+  allow_implicit_invocation: true

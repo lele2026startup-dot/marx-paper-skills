@@ -25,6 +25,7 @@ import os
 import sys
 import subprocess
 import argparse
+import tempfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
@@ -55,7 +56,7 @@ def run_pandoc(md_path, tmp_docx):
     print(f"步骤1: pandoc 转换 {md_path.name} → {tmp_docx.name}")
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"  pandoc 警告/错误: {result.stderr[:300]}")
+        raise RuntimeError(f"pandoc 转换失败: {result.stderr[:300]}")
     if not tmp_docx.exists():
         raise RuntimeError(f"pandoc 未生成 {tmp_docx}")
     print("  ✓ 完成")
@@ -156,38 +157,55 @@ def check_ref_duplicates(docx_path):
         print("  ✓ 参考文献无重复 (校验通过)")
 
 
-def build(md_path, out_docx, use_circle=True):
+
+def publish_file(temp_path, out_path, overwrite=False):
+    """Publish only a completed temporary file; protect existing results by default."""
+    from datetime import datetime
+    import os
+    import shutil
+    target = Path(out_path)
+    temp = Path(temp_path)
+    if overwrite:
+        if target.exists():
+            stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+            backup = target.with_name(target.name + '.bak.' + stamp)
+            shutil.copy2(target, backup)
+        os.replace(temp, target)
+    else:
+        # Same directory/filesystem: exclusive link fails if another writer created target.
+        if os.name == 'nt':
+            os.rename(temp, target)
+        else:
+            os.link(temp, target)
+            temp.unlink()
+
+
+def build(md_path, out_docx, use_circle=True, overwrite=False):
     md_path = Path(md_path)
     out_docx = Path(out_docx)
     if not md_path.exists():
         raise FileNotFoundError(f"找不到 {md_path}")
 
-    tmp_docx = out_docx.with_suffix(".tmp.docx")
-
-    try:
-        # 第1步：pandoc
+    if out_docx.exists() and not overwrite:
+        raise FileExistsError(f"输出已存在，未覆盖：{out_docx}；另存或获授权后使用 --overwrite")
+    if md_path.suffix.lower() != '.md':
+        raise ValueError("本生成脚本只接受 .md；已有 docx 请用文档编辑流程")
+    out_docx.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.paper-build-', dir=out_docx.parent) as temp:
+        tmp_docx = Path(temp) / 'pandoc.docx'
+        ready = Path(temp) / 'verified.docx'
         run_pandoc(md_path, tmp_docx)
-
-        # 第2步：render_docx
-        run_render(tmp_docx, out_docx)
-    finally:
-        # 兜底清理 .tmp.docx：无论成功失败都删，避免残留让用户困惑（“V2.tmp 是什么”）
-        try:
-            tmp_docx.unlink(missing_ok=True)
-        except Exception:
-            pass
-
-    if use_circle:
-        # 第3、4步：圈码化 + 每页重编号
-        run_circle_marks(out_docx)
-        run_renumber(out_docx)
-
-    # 第5步：参考文献去重校验（dry-run 报告，不改文件）
-    check_ref_duplicates(out_docx)
-
+        run_render(tmp_docx, ready)
+        if use_circle:
+            run_circle_marks(ready)
+            run_renumber(ready)
+        from docx import Document
+        Document(str(ready))
+        check_ref_duplicates(ready)
+        publish_file(ready, out_docx, overwrite)
     print(f"\n✅ 全部完成: {out_docx}")
     if not use_circle:
-        print("  （--no-circle 模式：脚注为 pandoc 默认数字编号，请在 Word 里手动调圈码和每页重编号）")
+        print("  简单数字编号模式；圈码与分页尚未验证")
 
 
 if __name__ == "__main__":
@@ -196,5 +214,6 @@ if __name__ == "__main__":
     parser.add_argument("docx", help="输出 docx 文件路径")
     parser.add_argument("--no-circle", action="store_true",
                         help="不用圈码和每页重编号，pandoc 默认数字编号（用户手动调）")
+    parser.add_argument("--overwrite", action="store_true", help="已获授权覆盖，保留旧文件备份")
     args = parser.parse_args()
-    build(args.md, args.docx, use_circle=not args.no_circle)
+    build(args.md, args.docx, use_circle=not args.no_circle, overwrite=args.overwrite)

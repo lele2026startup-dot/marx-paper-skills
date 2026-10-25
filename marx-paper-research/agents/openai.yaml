@@ -1,0 +1,6 @@
+interface:
+  display_name: "马理论论文素材"
+  short_description: "从参考论文提取直接引文、间接引用与数据，连同出处按已定论文结构整理。"
+  default_prompt: "请使用 $marx-paper-research 完成相应任务，并沿用已确认的路径与规则。"
+policy:
+  allow_implicit_invocation: true

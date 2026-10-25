@@ -16,10 +16,12 @@ format_docx.py — 资料库 TXT 批量渲染为规范排版 Word（马理论材
   页边距                上下 2.54cm 左右 3.17cm
 
 安全约定：只写 .docx，绝不改动 .txt；整篇乱码的文件跳过不动（打印警告）。
-幂等：重复运行结果一致，覆盖已有 docx。
+默认拒绝覆盖已有 docx；--overwrite 显式授权后备份旧文件。
 """
-import os, re, sys, io, argparse
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+import os, re, sys, io, argparse, tempfile
+from pathlib import Path
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
@@ -70,8 +72,33 @@ def add_para(doc, text, font, size, bold=False, align=None, indent_chars=0,
     return p
 
 
-def render(txt_path, docx_path):
-    text = open(txt_path, encoding="utf-8").read()
+
+def publish_file(temp_path, out_path, overwrite=False):
+    """Publish only a completed temporary file; protect existing results by default."""
+    from datetime import datetime
+    import os
+    import shutil
+    target = Path(out_path)
+    temp = Path(temp_path)
+    if overwrite:
+        if target.exists():
+            stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+            backup = target.with_name(target.name + '.bak.' + stamp)
+            shutil.copy2(target, backup)
+        os.replace(temp, target)
+    else:
+        # Same directory/filesystem: exclusive link fails if another writer created target.
+        if os.name == 'nt':
+            os.rename(temp, target)
+        else:
+            os.link(temp, target)
+            temp.unlink()
+
+
+def render(txt_path, docx_path, overwrite=False):
+    if Path(docx_path).exists() and not overwrite:
+        raise FileExistsError(f"输出已存在，未覆盖：{docx_path}；另存或获授权后使用 --overwrite")
+    text = Path(txt_path).read_text(encoding="utf-8")
     bad = garble_count(text)
     if bad > 20:
         print(f"[SKIP 乱码{bad}处] {os.path.basename(txt_path)}")
@@ -113,7 +140,16 @@ def render(txt_path, docx_path):
             add_para(doc, s, "宋体", 12, indent_chars=2, line=1.5)
         i += 1
 
-    doc.save(docx_path)
+    target = Path(docx_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp = tempfile.mkstemp(prefix='.' + target.stem + '-', suffix='.docx', dir=target.parent)
+    os.close(fd)
+    try:
+        doc.save(temp)
+        Document(temp)  # Reopen before publication.
+        publish_file(temp, target, overwrite)
+    finally:
+        Path(temp).unlink(missing_ok=True)
     warn = f"（注意：{bad} 处疑似乱码字符）" if bad else ""
     print(f"[OK] {os.path.basename(docx_path)}  {len(text)}字符{warn}")
     return True
@@ -135,6 +171,7 @@ def collect_txts(paths):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("paths", nargs="+")
+    ap.add_argument("--overwrite", action="store_true", help="已获授权覆盖；先保存原文件备份")
     args = ap.parse_args()
 
     txts = collect_txts(args.paths)
@@ -144,7 +181,7 @@ def main():
     ok, skip = 0, 0
     for t in txts:
         d = os.path.splitext(t)[0] + ".docx"
-        if render(t, d):
+        if render(t, d, overwrite=args.overwrite):
             ok += 1
         else:
             skip += 1

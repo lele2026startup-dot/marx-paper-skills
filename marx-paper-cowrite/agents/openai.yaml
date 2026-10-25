@@ -1,0 +1,6 @@
+interface:
+  display_name: "马理论论文共写"
+  short_description: "逐段提问、收集用户想法并共写马理论论文；适用于边读边写和引导式写作。"
+  default_prompt: "请使用 $marx-paper-cowrite 完成相应任务，并沿用已确认的路径与规则。"
+policy:
+  allow_implicit_invocation: true

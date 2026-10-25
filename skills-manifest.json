@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "release": "2026.10.25",
+  "skills": [
+    {
+      "name": "marx-paper",
+      "required_files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/workflow-contract.md"
+      ]
+    },
+    {
+      "name": "marx-paper-cowrite",
+      "required_files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "marx-paper-journal-format",
+      "required_files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/journal-endnotes.md",
+        "scripts/build_journal_docx.py"
+      ]
+    },
+    {
+      "name": "marx-paper-material",
+      "required_files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/sources.md",
+        "scripts/fetch_text.py",
+        "scripts/format_docx.py"
+      ]
+    },
+    {
+      "name": "marx-paper-quickwrite",
+      "required_files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ],
+      "required_sections": [
+        "## 复用素材时的注意事项",
+        "## 输出与衔接"
+      ]
+    },
+    {
+      "name": "marx-paper-read",
+      "required_files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "marx-paper-research",
+      "required_files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "marx-paper-review",
+      "required_files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "marx-paper-structure",
+      "required_files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/structure-samples.md"
+      ]
+    },
+    {
+      "name": "marx-paper-thesis-format",
+      "required_files": [
+        "README.md",
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/gbt7714-format.md",
+        "scripts/build_docx.py",
+        "scripts/footnote_circle_marks.py",
+        "scripts/render_docx.py",
+        "scripts/renumber_footnotes_per_page.py"
+      ]
+    },
+    {
+      "name": "marx-paper-topic",
+      "required_files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/title-samples.md"
+      ],
+      "required_sections": [
+        "## 第一步：认识优质题目的特征",
+        "## 第二步：情况确认与分流",
+        "## 第三步：拟题",
+        "## 主题确定后：找文献"
+      ]
+    }
+  ]
+}

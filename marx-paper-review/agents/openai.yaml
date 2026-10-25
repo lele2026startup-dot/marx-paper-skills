@@ -1,0 +1,6 @@
+interface:
+  display_name: "马理论论文审核"
+  short_description: "独立检查完成的马理论论文的论证、溯源、引文、结构与语体，给出问题和修改建议。"
+  default_prompt: "请使用 $marx-paper-review 完成相应任务，并沿用已确认的路径与规则。"
+policy:
+  allow_implicit_invocation: true

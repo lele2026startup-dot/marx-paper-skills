@@ -1,0 +1,6 @@
+interface:
+  display_name: "课程与学位论文排版"
+  short_description: "为马理论课程和学位论文核实引文、添加真脚注和参考文献并排版 Word；期刊尾注用 journal-format。"
+  default_prompt: "请使用 $marx-paper-thesis-format 完成相应任务，并沿用已确认的路径与规则。"
+policy:
+  allow_implicit_invocation: true

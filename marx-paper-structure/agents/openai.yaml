@@ -1,0 +1,6 @@
+interface:
+  display_name: "马理论论文结构"
+  short_description: "为马理论论文搭建章节、标题与字数方案，支持讨论和版本调整。"
+  default_prompt: "请使用 $marx-paper-structure 完成相应任务，并沿用已确认的路径与规则。"
+policy:
+  allow_implicit_invocation: true

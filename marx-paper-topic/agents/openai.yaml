@@ -1,0 +1,6 @@
+interface:
+  display_name: "马理论论文选题"
+  short_description: "为马理论课程论文、学位论文拟题、打磨切口和评估选题，保留纯理论研究定位。"
+  default_prompt: "请使用 $marx-paper-topic 完成相应任务，并沿用已确认的路径与规则。"
+policy:
+  allow_implicit_invocation: true

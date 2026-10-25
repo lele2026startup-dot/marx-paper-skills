@@ -1,0 +1,6 @@
+interface:
+  display_name: "马理论论文快速写作"
+  short_description: "依据已定结构和素材撰写马理论论文正文；适用于一次写整篇或指定章节。"
+  default_prompt: "请使用 $marx-paper-quickwrite 完成相应任务，并沿用已确认的路径与规则。"
+policy:
+  allow_implicit_invocation: true

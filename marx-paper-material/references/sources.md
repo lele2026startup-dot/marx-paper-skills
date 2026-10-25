@@ -11,7 +11,7 @@
 | **中文马克思主义文库 marxists.org**（首选） | 国际马克思主义档案馆中文部，经典著作全文最全。URL 模式：`marxists.org/chinese/<作者>/marxist.org-chinese-mao-YYYYMMDD.htm`（毛泽东按日期编号）；中央文件选集在 `marxists.org/chinese/reference-books/ccp-1921-1949/<卷>/<编号>.htm` |
 | 维基文库 zh.wikisource.org | 公有领域全文，UTF-8 干净，适合交叉核对 |
 
-查找技巧：用 anysearch 搜 `《标题》 全文 site:marxists.org` 或 `《标题》 marxists 作者 日期`。
+查找技巧：用当前可用的网页搜索工具搜 `《标题》 全文 site:marxists.org` 或 `《标题》 marxists 作者 日期`。
 
 ### 党内历史文件（决议、决议案、会议文件）
 
@@ -44,11 +44,11 @@
 
 老中文网站（尤其 marxists.org）的编码很乱，这是历次抓取出错的最大来源：
 
-1. **一律优先用 GB18030 解码**。它是 GB2312/GBK 的超集：对纯 GB2312 页面完全兼容，又能正确处理扩展字符。用 gb2312 解码会把"——"破折号和生僻字破坏成 `U+FFFD`（锟斤拷的前身）。
-2. **不要信页面声明的 charset**。有的页面声明 ISO-8859-1 或干脆不声明，实际是 GB18030。正确姿势：拿 `r.content` 字节流，按「声明 charset → gb18030 → utf-8」顺序试，用乱码计数验证。
-3. **乱码签名**：`锟斤拷`、`U+FFFD`（）、`烫烫烫` 出现即为解码错误。
-4. **乱码检测阈值**：个别 U+FFFD（个位数）可能是原文个别生僻字损坏，不等于整篇乱码；几十上百个才是整篇坏。脚本会打印计数和上下文供判断。
-5. anysearch 的 `extract` 命令对 GBK 系页面会出乱码——这类页面改用 fetch_text.py 直接下载。curl 在此环境容易超时，优先 python requests。
+1. 显式 --encoding 按严格指定编码解码，失败报错，不偷偷换编码。
+2. 自动识别先看BOM、有效HTTP声明、HTML meta charset；无有效声明先严格UTF-8，再试GB18030/Big5。gb2312/GBK声明按其超集GB18030处理扩展字符。
+3. ISO-8859-1/ASCII等泛化声明不作为中文网页的可靠线索。即使乱码签名为零，也要对照原页面首尾与篇幅。
+4. 抓取使用标准库urllib，无需强制安装requests或指定搜索服务。取完整字节后再解码，不通过终端默认编码中转。
+5. 输出为空或含明显损坏字符时拒绝发布。已存在文件默认保护；--overwrite在本次授权允许时使用并保留时间戳备份。
 
 ## 3. HTML 正文提取经验
 

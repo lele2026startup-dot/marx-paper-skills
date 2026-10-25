@@ -6,15 +6,15 @@ build_journal_docx.py —— 马理论科期刊投稿式排版（内置双栏期
 把结构化 markdown 草稿 + meta.json 元信息，生成符合内置双栏期刊模板的 Word 文档：
 - 顺序编码制真尾注（endnoteReference 链接 endnotes.xml，可点击跳转、自动编号）
 - 文中上标 [N] 方括号（vertAlign=superscript，三个 run：[ + endnoteReference + ]）
-- 一文一引：每篇文献只在文中引用一次；检测到重复标注时保留首次、删掉后面的
+- 每处引用保留：首次建立真尾注；重复来源用带链接的 NOTEREF 域，文献条目只列一次
 - 自动重编号：按文中首次出现顺序重排编号，参考文献表同步重排
-- "参考文献"标题做成一条不被引用的尾注（永远贴着尾注列表，不会分离跑页）
+- "参考文献"标题放在第一条有效尾注首段；孤立未引用尾注会被Word忽略
 - 作者简介做成第一页真脚注（自动编号），文末另附作者简介+联系方式段
-- 自动重编号/重复引用处理结果在 stdout 报告，供 agent 转述给用户
+- 默认不覆盖已有输出；只有临时文件验证通过后才发布，授权覆盖用 --overwrite
 
 用法：
     python build_journal_docx.py --md 论文正文.md --meta meta.json --out 投稿版.docx
-    可选：--no-english  强制不出英文部分（默认：meta 里有 english 块就出）
+    可选：--no-english 不出英文部分；--overwrite 授权备份后覆盖
 
 输入约定（markdown）：
     # 标题
@@ -35,7 +35,7 @@ meta.json 字段：
     affiliation  单位，如"（XX大学XX学院，北京 100000）"（括号自带）
     author_bio   作者简介（不含"作者简介："前缀），如"张三（2000—），男，……研究。"
     contact      文末联系方式，如"联系电话：13800000000，电子邮箱：xx@xx.edu.cn。"
-    clc          中图分类号，默认 G641
+    clc          中图分类号，未提供时不猜填
     doc_code     文献标识码，默认 A
     fund         基金项目（可选，进第一页脚注）
     received     收稿日期（可选，进第一页脚注），如"2026-01-01"
@@ -50,6 +50,9 @@ import json
 import re
 import sys
 import zipfile
+import os
+import tempfile
+from pathlib import Path
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
@@ -289,29 +292,6 @@ def _set_part_blob(part, root):
     part._blob = etree.tostring(root, xml_declaration=True, encoding='UTF-8', standalone=True)
 
 
-def add_ref_heading_endnote(doc, en_id):
-    """"参考文献"标题做成一条不被文中引用的尾注：
-    渲染时排在尾注区最前、不编号、永远紧贴尾注列表，不会与列表分离跑页。"""
-    en_part = ensure_endnotes_part(doc)
-    root = etree.fromstring(en_part.blob)
-    en = etree.SubElement(root, qn('w:endnote'))
-    en.set(qn('w:id'), str(en_id))
-    p = etree.SubElement(en, qn('w:p'))
-    pp = etree.SubElement(p, qn('w:pPr'))
-    sp = etree.SubElement(pp, qn('w:spacing'))
-    sp.set(qn('w:before'), '120'); sp.set(qn('w:after'), '60')
-    r = etree.SubElement(p, qn('w:r'))
-    rPr = etree.SubElement(r, qn('w:rPr'))
-    rf = etree.SubElement(rPr, qn('w:rFonts'))
-    rf.set(qn('w:ascii'), 'Times New Roman'); rf.set(qn('w:hAnsi'), 'Times New Roman')
-    rf.set(qn('w:eastAsia'), TPL['ref_heading']['cn'])
-    etree.SubElement(rPr, qn('w:b'))
-    sz = etree.SubElement(rPr, qn('w:sz'))
-    sz.set(qn('w:val'), str(int(TPL['ref_heading']['sz'] * 2)))
-    t = etree.SubElement(r, qn('w:t')); t.text = '参考文献'
-    _set_part_blob(en_part, root)
-
-
 def add_endnote_entry(doc, en_id, ref_text):
     """一条尾注文献条目：[ endnoteRef ] 文献内容，小五号，单倍行距。"""
     en_part = ensure_endnotes_part(doc)
@@ -321,6 +301,18 @@ def add_endnote_entry(doc, en_id, ref_text):
 
     en = etree.SubElement(root, qn('w:endnote'))
     en.set(qn('w:id'), str(en_id))
+    if en_id == 2:
+        heading = etree.SubElement(en, qn('w:p'))
+        heading_pr = etree.SubElement(heading, qn('w:pPr'))
+        etree.SubElement(heading_pr, qn('w:keepNext'))
+        heading_run = etree.SubElement(heading, qn('w:r'))
+        heading_rpr = etree.SubElement(heading_run, qn('w:rPr'))
+        etree.SubElement(heading_rpr, qn('w:b'))
+        fonts = etree.SubElement(heading_rpr, qn('w:rFonts'))
+        fonts.set(qn('w:eastAsia'), TPL['ref_heading']['cn'])
+        size = etree.SubElement(heading_rpr, qn('w:sz'))
+        size.set(qn('w:val'), str(int(TPL['ref_heading']['sz'] * 2)))
+        etree.SubElement(heading_run, qn('w:t')).text = '参考文献'
     p = etree.SubElement(en, qn('w:p'))
     pp = etree.SubElement(p, qn('w:pPr'))
     sp = etree.SubElement(pp, qn('w:spacing'))
@@ -387,115 +379,82 @@ def make_endnote_ref_run(en_id):
     return r
 
 
-def postprocess_endnotes(doc, refs_by_new_num, n_refs, report):
-    """扫描全文 [N] → 按首次出现顺序重编号（一文一引）→ 替换为上标尾注引用 → 建尾注条目。
-
-    refs_by_new_num 已经是按出现顺序重排好的参考文献（1..n_refs）。
-    重复引用同一编号：保留首次、删掉后面的（一文一引原则）。
-    """
-    # Phase 1: 收集所有 [N]
-    cite_records = []
+def postprocess_endnotes(doc, refs_by_old_num, n_refs, report):
+    """One true endnote per source; every repeated occurrence is a linked NOTEREF field."""
+    records = []
     for para in doc.paragraphs:
         for run in para.runs:
-            text = run.text or ''
-            for m in re.finditer(r'\[(\d+)\]', text):
-                cite_records.append((para, run, m.start(), m.end(), int(m.group(1))))
-
-    # Phase 2: 旧编号 → 新编号（按首次出现顺序），重复引用只保留首次
-    old_to_new = {}
-    removed_dupes = []  # (para, run, ms, me, old_n)
-    seen_count = {}
-    kept_cites = []
-    for para, run, ms, me, old_n in cite_records:
-        seen_count[old_n] = seen_count.get(old_n, 0) + 1
-        if old_n not in old_to_new:
-            old_to_new[old_n] = len(old_to_new) + 1
-            kept_cites.append((para, run, ms, me, old_n, old_to_new[old_n]))
-        else:
-            removed_dupes.append((para, run, ms, me, old_n))
-
-    for old_n, cnt in sorted(seen_count.items()):
-        if cnt > 1:
-            report.append(f'⚠ 一文一引：原[{old_n}]在文中出现 {cnt} 次，保留第 1 次，删掉后 {cnt - 1} 处标注')
-    if any(old_to_new.get(k, k) != k for k in old_to_new):
-        mapping = ', '.join(f'[{k}]→[{v}]' for k, v in sorted(old_to_new.items()) if k != v)
-        report.append(f'ℹ 编号已按文中首次出现顺序重排（顺序编码制）：{mapping}')
-
-    # 编号连续性检查：文中标注与参考文献表必须对得上
-    cited_new = set(old_to_new.values())
-    for i in range(1, n_refs + 1):
-        if i not in cited_new:
-            report.append(f'⚠ 参考文献第 {i} 条未在正文中被引用，已删除该条（顺序编码制只列被引用的）')
-    missing = sorted(n for n in cited_new if n > n_refs)
+            for match in re.finditer(r'\[(\d+)\]', run.text or ''):
+                records.append((run, match.start(), match.end(), int(match.group(1))))
+    cited = {item[3] for item in records}
+    missing = sorted(cited - set(refs_by_old_num))
     if missing:
-        raise SystemExit(f'错误：文中标注 {missing} 没有对应的参考文献条目，请补齐后重跑')
-
-    # 重排参考文献表（按新编号）
-    refs_reordered = {}
-    for old_n, new_n in old_to_new.items():
-        if old_n in refs_by_new_num:
-            refs_reordered[new_n] = refs_by_new_num[old_n]
-    # 被删条目：原编号未被引用过的 refs 不进表（已由上面警告）
-    final_refs = {i: refs_reordered[i] for i in sorted(refs_reordered)}
-
-    # Phase 3: 建尾注条目（id=1 留给"参考文献"标题，内容条目从 id=2 开始）
+        raise ValueError(f'文中原编号 {missing} 没有对应参考文献条目，未生成输出')
+    if not records:
+        raise ValueError('正文没有可识别的引用；请检查 [N] 或 Pandoc 脚注定义')
+    old_to_new, source_to_new, final_refs = {}, {}, {}
+    for _, _, _, old in records:
+        if old not in old_to_new:
+            # Exact normalized bibliography equality only; never merge versions/pages heuristically.
+            key = re.sub(r'\s+', ' ', refs_by_old_num[old]).strip()
+            if key not in source_to_new:
+                new = len(source_to_new) + 1
+                source_to_new[key] = new
+                final_refs[new] = refs_by_old_num[old]
+            old_to_new[old] = source_to_new[key]
+    unused = sorted(set(refs_by_old_num) - cited)
+    if unused:
+        report.append(f'ℹ 未引条目原编号 {unused} 不进入引文表')
     ensure_endnotes_part(doc)
-    add_ref_heading_endnote(doc, 1)
-    for new_n in range(1, max(final_refs) + 1 if final_refs else 1):
-        add_endnote_entry(doc, new_n + 1, final_refs.get(new_n, ''))
-
-    # Phase 4: 按 run 分组替换（同一 run 多个 [N] 一次性替换；重复标注直接删除文本）
-    from collections import OrderedDict
-    run_groups = OrderedDict()
-    for para, run, ms, me, old_n, new_n in kept_cites:
-        rk = id(run)
-        if rk not in run_groups:
-            run_groups[rk] = (para, run, [])
-        run_groups[rk][2].append((ms, me, new_n, True))
-    for para, run, ms, me, old_n in removed_dupes:
-        rk = id(run)
-        if rk not in run_groups:
-            run_groups[rk] = (para, run, [])
-        run_groups[rk][2].append((ms, me, None, False))
-
-    replaced = 0
-    for rk, (para, run, cites) in run_groups.items():
-        parent = run._element.getparent()
-        if parent is None:
-            continue
-        idx = list(parent).index(run._element)
+    for number, text in final_refs.items():
+        add_endnote_entry(doc, number + 1, text)
+    grouped = {}
+    for run, start, end, old in records:
+        grouped.setdefault(run._element, (run, []))[1].append((start, end, old_to_new[old]))
+    seen = set()
+    repeats = 0
+    for element, (run, occurrences) in grouped.items():
+        parent = element.getparent()
+        index = list(parent).index(element)
         text = run.text or ''
-        orig_rPr = run._element.find(qn('w:rPr'))
-        cites.sort(key=lambda x: x[0])
-        new_elems = []
+        original_pr = element.find(qn('w:rPr'))
+        output = []
         last = 0
-        for ms, me, new_n, is_kept in cites:
-            if ms > last:
-                rb = OxmlElement('w:r')
-                if orig_rPr is not None:
-                    rb.append(copy.deepcopy(orig_rPr))
-                tb = OxmlElement('w:t'); tb.text = text[last:ms]; tb.set(XML_SPACE, 'preserve')
-                rb.append(tb)
-                new_elems.append(rb)
-            if is_kept:
-                new_elems.append(make_superscript_bracket('['))
-                new_elems.append(make_endnote_ref_run(new_n + 1))
-                new_elems.append(make_superscript_bracket(']'))
-                replaced += 1
-            # 重复标注：不写入任何元素，等效于从文中删除
-            last = me
+        def literal(value):
+            newrun = OxmlElement('w:r')
+            if original_pr is not None:
+                newrun.append(copy.deepcopy(original_pr))
+            node = OxmlElement('w:t'); node.text = value; node.set(XML_SPACE, 'preserve')
+            newrun.append(node)
+            return newrun
+        for start, end, number in occurrences:
+            if start > last:
+                output.append(literal(text[last:start]))
+            output.append(make_superscript_bracket('['))
+            if number not in seen:
+                bookmark = OxmlElement('w:bookmarkStart')
+                bookmark.set(qn('w:id'), str(number)); bookmark.set(qn('w:name'), f'cite_{number}')
+                output.extend([bookmark, make_endnote_ref_run(number + 1)])
+                bookmark_end = OxmlElement('w:bookmarkEnd'); bookmark_end.set(qn('w:id'), str(number))
+                output.append(bookmark_end)
+                seen.add(number)
+            else:
+                field = OxmlElement('w:fldSimple')
+                field.set(qn('w:instr'), f' NOTEREF cite_{number} \\h ')
+                field.append(make_superscript_bracket(str(number)))
+                output.append(field)
+                repeats += 1
+            output.append(make_superscript_bracket(']'))
+            last = end
         if last < len(text):
-            ra = OxmlElement('w:r')
-            if orig_rPr is not None:
-                ra.append(copy.deepcopy(orig_rPr))
-            ta = OxmlElement('w:t'); ta.text = text[last:]; ta.set(XML_SPACE, 'preserve')
-            ra.append(ta)
-            new_elems.append(ra)
-        for j, elem in enumerate(new_elems):
-            parent.insert(idx + j, elem)
-        parent.remove(run._element)
-
-    report.append(f'✅ 文中标注 {replaced} 处 → 真尾注 {len(final_refs)} 条（一文一引，编号 1-{len(final_refs)}）')
+            output.append(literal(text[last:]))
+        for offset, node in enumerate(output):
+            parent.insert(index + offset, node)
+        parent.remove(element)
+    doc._citation_count = len(records)
+    report.append(f'✅ 保留全部 {len(records)} 处引用：{len(final_refs)} 条真尾注、{repeats} 处 NOTEREF 交叉引用；无引用位置删除')
+    if repeats:
+        report.append('ℹ 重复引用使用 Word NOTEREF 域；交付前在目标 Word/WPS 检查域更新与跳转')
     return final_refs
 
 
@@ -510,139 +469,198 @@ def patch_settings_endnote_numfmt(doc):
         ep.remove(n)
     n = OxmlElement('w:numFmt'); n.set(qn('w:val'), 'decimal')
     ep.insert(0, n)
+    for position in ep.findall(qn('w:pos')):
+        ep.remove(position)
+    position = OxmlElement('w:pos'); position.set(qn('w:val'), 'sectEnd')
+    ep.insert(0, position)
+    compat = settings_part.find(qn('w:compat'))
+    if compat is None:
+        compat = OxmlElement('w:compat'); settings_part.append(compat)
+    if compat.find(qn('w:footnoteLayoutLikeWW8')) is None:
+        compat.append(OxmlElement('w:footnoteLayoutLikeWW8'))
 
 
 # ==================== markdown 解析 ====================
 
 def parse_md(path):
-    text = open(path, encoding='utf-8').read()
-    lines = text.split('\n')
-
-    data = {
-        'title': None, 'abstract': None, 'keywords': None,
-        'body_blocks': [],   # ('h1'|'h2'|'h3'|'p'|'intro_p', text)
-        'refs_raw': [],      # [(old_n, text)]
-    }
+    text = Path(path).read_text(encoding='utf-8-sig')
+    # Minimal safe metadata support: YAML title is scalar text, not arbitrary YAML execution.
+    yaml_title = None
+    if text.startswith('---\n'):
+        end = text.find('\n---', 4)
+        if end < 0:
+            raise ValueError('YAML frontmatter 缺结束标记')
+        front = text[4:end]
+        title = re.search(r'^title:\s*(.+)$', front, re.M)
+        if title:
+            yaml_title = title.group(1).strip().strip('\'\"')
+        text = text[end + 4:].lstrip('\n')
+    lines = text.splitlines()
+    notes, cleaned = {}, []
+    i = 0
+    while i < len(lines):
+        match = re.match(r'^\[\^([^\]]+)\]:\s*(.*)$', lines[i])
+        if not match:
+            cleaned.append(lines[i]); i += 1; continue
+        label, value = match.groups()
+        if label in notes:
+            raise ValueError(f'脚注定义重复：{label}')
+        values = [value]
+        i += 1
+        while i < len(lines) and (lines[i].startswith('    ') or lines[i].startswith('\t')):
+            values.append(lines[i].strip()); i += 1
+        notes[label] = ' '.join(values).strip()
+        if not notes[label]:
+            raise ValueError(f'脚注定义为空：{label}')
+    data = {'title': yaml_title, 'abstract': None, 'keywords': None, 'body_blocks': [], 'refs_raw': []}
     in_refs = False
-    para_buf = []
-
-    def flush_para():
-        if para_buf:
-            joined = ' '.join(para_buf).strip()
-            if joined:
-                data['body_blocks'].append(('p', joined))
-            para_buf.clear()
-
-    def clean(t):
-        # 去掉 markdown 强调符号，保留纯文本（[N] 保留）
-        return re.sub(r'\*\*', '', t).strip()
-
-    for raw in lines:
+    paragraphs = []
+    def clean(value):
+        return value.replace('**', '').strip()
+    def flush():
+        if paragraphs:
+            data['body_blocks'].append(('p', ' '.join(paragraphs).strip()))
+            paragraphs.clear()
+    for raw in cleaned:
         line = raw.strip()
+        value = clean(line)
+        heading = re.sub(r'^#{1,6}\s+', '', value)
+        if re.fullmatch(r'参考文献\s*[:：]?', heading):
+            flush(); in_refs = True; continue
         if not line or line == '---':
-            flush_para()
-            continue
+            flush(); continue
         if in_refs:
-            m = re.match(r'^\[(\d+)\]\s*(.+)$', line)
-            if m:
-                data['refs_raw'].append((int(m.group(1)), clean(m.group(2))))
+            match = re.fullmatch(r'\[(\d+)\]\s*(.+)', value)
+            if not match:
+                raise ValueError(f'无法识别参考文献条目：{line[:80]}')
+            data['refs_raw'].append((int(match.group(1)), match.group(2))); continue
+        if line.startswith('# '):
+            flush()
+            heading_title = clean(line[2:])
+            if data['title'] and data['title'] != heading_title:
+                raise ValueError('YAML title 与一级标题冲突')
+            data['title'] = heading_title; continue
+        match = re.match(r'^摘\s*要\s*[:：]\s*(.*)', value)
+        if match:
+            flush(); data['abstract'] = match.group(1); continue
+        match = re.match(r'^关键词\s*[:：]\s*(.*)', value)
+        if match:
+            flush(); data['keywords'] = match.group(1); continue
+        match = re.match(r'^(#{2,4})\s+(.*)', line)
+        if match:
+            flush()
+            kind = {2: 'h1', 3: 'h2', 4: 'h3'}[len(match.group(1))]
+            name = clean(match.group(2))
+            data['body_blocks'].append(('intro_mark' if name == '引言' else kind, '' if name == '引言' else name))
             continue
-        if line.startswith('# ') and data['title'] is None:
-            flush_para()
-            data['title'] = clean(line[2:])
-            continue
-        c = clean(line)
-        if re.match(r'^摘\s*要：', c):
-            flush_para()
-            data['abstract'] = re.sub(r'^摘\s*要：', '', c).strip()
-            continue
-        if re.match(r'^关键词：', c):
-            flush_para()
-            data['keywords'] = re.sub(r'^关键词：', '', c).strip()
-            continue
-        if re.match(r'^参考文献：?$', c):
-            flush_para()
-            in_refs = True
-            continue
-        m2 = re.match(r'^##\s+(.*)$', line)
-        m3 = re.match(r'^###\s+(.*)$', line)
-        m4 = re.match(r'^####\s+(.*)$', line)
-        if m4:
-            flush_para(); data['body_blocks'].append(('h3', clean(m4.group(1)))); continue
-        if m3:
-            flush_para(); data['body_blocks'].append(('h2', clean(m3.group(1)))); continue
-        if m2:
-            flush_para()
-            h = clean(m2.group(1))
-            if h == '引言':
-                # 内置模板：引言不排标题，其下段落直接作正文开头
-                data['body_blocks'].append(('intro_mark', ''))
-            else:
-                data['body_blocks'].append(('h1', h))
-            continue
-        para_buf.append(line)
-    flush_para()
-
-    errs = []
-    if not data['title']:
-        errs.append('缺标题（# 标题）')
-    if not data['abstract']:
-        errs.append('缺摘要（**摘要：** ……）')
-    if not data['keywords']:
-        errs.append('缺关键词（**关键词：** ……）')
-    if not data['refs_raw']:
-        errs.append('缺参考文献（**参考文献：** + [N] 条目）')
-    if errs:
-        raise SystemExit('markdown 解析失败：' + '；'.join(errs))
+        paragraphs.append(clean(line))
+    flush()
+    refs = dict(data['refs_raw'])
+    if len(refs) != len(data['refs_raw']):
+        raise ValueError('参考文献编号重复')
+    numeric_cites = {int(match) for _, value in data['body_blocks'] for match in re.findall(r'\[(\d+)\]', value)}
+    missing_numeric = sorted(numeric_cites - set(refs))
+    if missing_numeric:
+        raise ValueError(f'文中原编号 {missing_numeric} 没有对应参考文献条目，不能用新转换的脚注编号补缺')
+    next_number = max(refs, default=0) + 1
+    note_map = {}
+    def note(match):
+        nonlocal next_number
+        label = match.group(1)
+        if label not in notes:
+            raise ValueError(f'脚注 [{label}] 没有定义')
+        if label not in note_map:
+            matching = next((n for n, value in refs.items() if value.strip() == notes[label]), None)
+            number = matching if matching is not None else next_number
+            if matching is None:
+                refs[number] = notes[label]; next_number += 1
+            note_map[label] = number
+        return f'[{note_map[label]}]'
+    converted = []
+    for kind, value in data['body_blocks']:
+        if re.search(r'\[\d+\s*[,，;；\-–]\s*\d+', value):
+            raise ValueError('暂不支持合并/区间引用标注，请展开为 [1][2] 等独立标注')
+        converted.append((kind, re.sub(r'\[\^([^\]]+)\]', note, value)))
+    data['body_blocks'] = converted
+    data['refs_raw'] = sorted(refs.items())
+    for field in ('title', 'abstract', 'keywords'):
+        if not data[field]:
+            raise ValueError(f'缺少 {field}，请补齐标题、摘要和关键词')
+    if not refs:
+        raise ValueError('缺参考文献或脚注定义')
     return data
 
 
-# ==================== 验证 ====================
-
-def verify(outpath, n_refs, report):
-    """重开生成的 docx，逐项自检。"""
-    z = zipfile.ZipFile(outpath)
-    doc_xml = z.read('word/document.xml').decode('utf-8')
-    en_xml = z.read('word/endnotes.xml').decode('utf-8')
-    fn_xml = z.read('word/footnotes.xml').decode('utf-8')
-
-    ok = True
-    # 1. 文中 endnoteReference 数量
-    n_inbody = len(re.findall(r'<w:endnoteReference', doc_xml))
-    # 2. 尾注条目（不含 separator/continuationSeparator/标题尾注）
-    entries = re.findall(r'<w:endnote w:id="(\d+)">(.*?)</w:endnote>', en_xml, re.S)
-    content_entries = [(i, b) for i, b in entries if 'w:type=' not in b]
-    heading_ok = any('参考文献' in b and '<w:endnoteRef' not in b.replace('<w:endnoteRef/>', '')
-                     for _, b in entries)
-    # 3. 无残留 [N] 纯文本
-    texts = ''.join(re.findall(r'<w:t[^>]*>([^<]*)</w:t>', doc_xml))
-    leftover = re.findall(r'\[\d+\]', texts)
-    # 4. 上标数量
-    n_sup = len(re.findall(r'w:val="superscript"', doc_xml))
-    # 5. 脚注引用
-    n_fn = len(re.findall(r'<w:footnoteReference', doc_xml))
-
+def verify(outpath, n_refs, report, expected_citations=None):
+    """Validate references, targets, fields and visible content in the completed package."""
+    ns = {'w': W_NS}
+    with zipfile.ZipFile(outpath) as archive:
+        root = etree.fromstring(archive.read('word/document.xml'))
+        en = etree.fromstring(archive.read('word/endnotes.xml'))
+        fn = etree.fromstring(archive.read('word/footnotes.xml'))
+    endrefs = root.findall('.//w:endnoteReference', ns)
+    entries = {int(node.get(qn('w:id'))): node for node in en.findall('w:endnote', ns) if int(node.get(qn('w:id'))) >= 2}
+    fields = [f for f in root.findall('.//w:fldSimple', ns) if f.get(qn('w:instr'), '').strip().startswith('NOTEREF ')]
+    bookmarks = {node.get(qn('w:name')): node for node in root.findall('.//w:bookmarkStart', ns)}
+    end_bookmarks = {node.get(qn('w:id')) for node in root.findall('.//w:bookmarkEnd', ns)}
+    texts = ''.join(node.text or '' for node in root.xpath('.//w:t[not(ancestor::w:fldSimple)]', namespaces=ns))
+    targets_ok = True
+    for field in fields:
+        instruction = field.get(qn('w:instr'), '').split()
+        target = instruction[1] if len(instruction) > 1 else ''
+        bookmark = bookmarks.get(target)
+        if bookmark is None or bookmark.get(qn('w:id')) not in end_bookmarks:
+            targets_ok = False
+        match = re.fullmatch(r'cite_(\d+)', target)
+        if not match or ''.join(field.itertext()).strip() != match.group(1):
+            targets_ok = False
+    expected_citations = n_refs if expected_citations is None else expected_citations
     checks = [
-        (n_inbody == n_refs, f'文中真尾注引用 {n_inbody} 个（期望 {n_refs}）'),
-        (len(content_entries) == n_refs + 1, f'尾注条目 {len(content_entries)} 条（期望 {n_refs} 条文献 + 1 条标题）'),
-        (heading_ok, '"参考文献"标题在尾注区内（紧贴列表不分离）'),
-        (all(''.join(re.findall(r'<w:t[^>]*>([^<]*)</w:t>', b)).strip('[] 0123456789') for _, b in content_entries if '参考文献' not in b),
-         '所有尾注条目内容非空'),
-        (not leftover, f'文中无残留 [N] 纯文本' + (f'（残留：{leftover}）' if leftover else '')),
-        (n_sup >= n_refs * 3, f'上标标记 {n_sup} 个（≥{n_refs * 3}，每处引用 3 个 run）'),
-        (n_fn == 1, f'作者简介脚注引用 {n_fn} 个（期望 1）'),
-        ('w:endnoteRef' in fn_xml or '作者简介' in fn_xml, '脚注内容已写入'),
+        (len(endrefs) == n_refs and {int(r.get(qn('w:id'))) for r in endrefs} == set(entries), '真尾注与文献条目一一对应'),
+        (len(endrefs) + len(fields) == expected_citations, f'全部 {expected_citations} 处引用均保留为尾注或交叉引用域'),
+        (targets_ok, '重复引用域的书签目标与缓存编号有效'),
+        (all(''.join(node.itertext()).strip() for node in entries.values()), '尾注条目非空'),
+        (not re.search(r'\[\^|\[\d+\]', texts), '无未转换的原始引用语法'),
+        (len(root.findall('.//w:footnoteReference', ns)) == 1 and '作者简介' in ''.join(fn.itertext()), '作者简介脚注在位'),
+        (any('参考文献' in ''.join(n.itertext()) for n in en.findall('w:endnote', ns)), '参考文献标题在尾注区'),
+        (all(ref.getparent().find('w:rPr/w:vertAlign', ns) is not None for ref in endrefs), '首次引用均有上标格式'),
     ]
-    for passed, msg in checks:
-        report.append(('✅ ' if passed else '❌ ') + msg)
-        ok = ok and passed
-    return ok
+    for passed, message in checks:
+        report.append(('✅ ' if passed else '❌ ') + message)
+    return all(passed for passed, _ in checks)
 
 
-# ==================== 主流程 ====================
 
-def build(md_path, meta_path, out_path):
-    meta = json.load(open(meta_path, encoding='utf-8'))
+def publish_file(temp_path, out_path, overwrite=False):
+    """Publish only a completed temporary file; protect existing results by default."""
+    from datetime import datetime
+    import os
+    import shutil
+    target = Path(out_path)
+    temp = Path(temp_path)
+    if overwrite:
+        if target.exists():
+            stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+            backup = target.with_name(target.name + '.bak.' + stamp)
+            shutil.copy2(target, backup)
+        os.replace(temp, target)
+    else:
+        # Same directory/filesystem: exclusive link fails if another writer created target.
+        if os.name == 'nt':
+            os.rename(temp, target)  # Windows rename atomically refuses an existing destination.
+        else:
+            os.link(temp, target)
+            temp.unlink()
+
+
+def build(md_path, meta_path, out_path, overwrite=False, no_english=False):
+    target = Path(out_path)
+    if target.exists() and not overwrite:
+        raise FileExistsError(f"输出已存在，未覆盖：{target}；另存或获授权后使用 --overwrite")
+    meta = json.loads(Path(meta_path).read_text(encoding='utf-8-sig'))
+    for required in ('author', 'affiliation', 'author_bio'):
+        if not isinstance(meta.get(required), str) or not meta[required].strip():
+            raise ValueError(f'元信息缺少 {required}')
     data = parse_md(md_path)
     report = []
 
@@ -688,11 +706,14 @@ def build(md_path, meta_path, out_path):
 
     add_mixed(doc, [('摘 要：', 'abs_label'), (data['abstract'], 'abs_content')])
     add_mixed(doc, [('关键词：', 'abs_label'), (data['keywords'], 'abs_content')])
-    clc = meta.get('clc', 'G641')
+    clc = meta.get('clc')
     doc_code = meta.get('doc_code', 'A')
-    add_mixed(doc, [('中图分类号：', 'clc_label'), (clc, 'clc_content'),
-                    ('    ', 'clc_content'),
-                    ('文献标识码：', 'clc_label'), (doc_code, 'clc_content')])
+    if clc:
+        add_mixed(doc, [('中图分类号：', 'clc_label'), (clc, 'clc_content'),
+                        ('    ', 'clc_content'),
+                        ('文献标识码：', 'clc_label'), (doc_code, 'clc_content')])
+    else:
+        report.append('ℹ 未提供中图分类号，未自动猜填')
 
     # ====== 第二节：双栏 正文 ======
     sec2 = doc.add_section()
@@ -719,7 +740,7 @@ def build(md_path, meta_path, out_path):
     sec3.start_type = WD_SECTION.CONTINUOUS
     setup_section(sec3, cols=1)
 
-    en = meta.get('english')
+    en = None if no_english else meta.get('english')
     if en:
         et = TPL['en_title']
         add_center(doc, en['title'], '宋体', et['en'], et['sz'], et['bold'], sb=6, sa=6)
@@ -750,9 +771,17 @@ def build(md_path, meta_path, out_path):
     add_body(doc, bio, 'bio_end', indent=False, sa=3)
 
     patch_settings_endnote_numfmt(doc)
-    doc.save(out_path)
-
-    ok = verify(out_path, len(final_refs), report)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp = tempfile.mkstemp(prefix='.' + target.stem + '-', suffix='.docx', dir=target.parent)
+    os.close(fd)
+    try:
+        doc.save(temp)
+        ok = verify(temp, len(final_refs), report, doc._citation_count)
+        if not ok:
+            raise ValueError('自检失败，未发布输出：' + '\n'.join(report))
+        publish_file(temp, target, overwrite)
+    finally:
+        Path(temp).unlink(missing_ok=True)
     print('\n'.join(report))
     print()
     print('输出：' + out_path)
@@ -766,8 +795,10 @@ def main():
     ap.add_argument('--md', required=True, help='正文 markdown')
     ap.add_argument('--meta', required=True, help='元信息 JSON（作者/单位/作者简介等）')
     ap.add_argument('--out', required=True, help='输出 docx 路径')
+    ap.add_argument("--overwrite", action="store_true", help="已获授权覆盖，保存旧文件备份")
+    ap.add_argument("--no-english", action="store_true", help="不生成英文部分")
     args = ap.parse_args()
-    build(args.md, args.meta, args.out)
+    build(args.md, args.meta, args.out, overwrite=args.overwrite, no_english=args.no_english)
 
 
 if __name__ == '__main__':

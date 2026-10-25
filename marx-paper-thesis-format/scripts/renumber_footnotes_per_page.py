@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import shutil
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -33,23 +34,20 @@ ALL_CIRCLES = CIRCLE_NUMS + CIRCLE_NUMS_EXT
 
 
 def get_circle(n):
-    """1-20 用圈码，21-35 用扩展圈码（字体可能不支持，但先给），超过则降级成 (n)"""
-    if 1 <= n <= 20:
-        return CIRCLE_NUMS[n - 1]
-    if 21 <= n <= 35:
-        return CIRCLE_NUMS_EXT[n - 21]
-    return f'({n})'
+    """Use common-font circles through 20; larger counts use visible parenthesized numbers."""
+    return CIRCLE_NUMS[n - 1] if 1 <= n <= 20 else f'({n})'
 
 
 def get_footnote_pages_via_word(docx_path):
     """用 Word COM 打开文档，返回 [页码] 列表，按脚注顺序（1起）。"""
     import win32com.client
     abs_path = os.path.abspath(str(docx_path))
-    word = win32com.client.Dispatch("Word.Application")
+    word = win32com.client.DispatchEx("Word.Application")
     word.Visible = False
     word.DisplayAlerts = False
     try:
-        doc = word.Documents.Open(abs_path)
+        doc = word.Documents.Open(abs_path, ReadOnly=True, AddToRecentFiles=False)
+        doc.Repaginate()
         pages = []
         for i in range(1, doc.Footnotes.Count + 1):
             fn = doc.Footnotes(i)
@@ -69,108 +67,105 @@ def renumber_docx(input_docx, output_docx):
     print(f"  共 {len(pages)} 个脚注，页码分布: {pages}")
 
     # 2. 解压 docx
-    tmp = Path("_renumber_tmp")
-    if tmp.exists():
-        shutil.rmtree(tmp)
-    tmp.mkdir()
-    with zipfile.ZipFile(input_docx) as z:
-        z.extractall(tmp)
+    with tempfile.TemporaryDirectory(prefix='.footnote-', dir=Path(output_docx).resolve().parent) as task_tmp:
+        tmp = Path(task_tmp)
+        with zipfile.ZipFile(input_docx) as z:
+            z.extractall(tmp)
 
-    doc_path = tmp / "word" / "document.xml"
-    fn_path = tmp / "word" / "footnotes.xml"
-    doc_xml = doc_path.read_text(encoding="utf-8")
-    fn_xml = fn_path.read_text(encoding="utf-8")
+        doc_path = tmp / "word" / "document.xml"
+        fn_path = tmp / "word" / "footnotes.xml"
+        doc_xml = doc_path.read_text(encoding="utf-8")
+        fn_xml = fn_path.read_text(encoding="utf-8")
 
-    # 3. 按 document.xml 出现顺序，提取每个 footnoteReference 的 w:id 和它后面的圈码
-    # 真实结构：<w:footnoteReference w:id="X" w:customMarkFollows="true"/><w:t ...>圈码</w:t>
-    pat = re.compile(
-        r'<w:footnoteReference\s+w:id="(\d+)"\s+w:customMarkFollows="true"\s*/>'
-        r'\s*(<w:r[^>]*>)?\s*<w:t[^>]*>([^<]+)</w:t>'
-    )
-    matches = pat.findall(doc_xml)
-    if not matches:
-        # 兜底：放宽匹配
-        refs_pat = re.compile(
-            r'<w:footnoteReference\s+w:id="(\d+)"[^>]*/>'
-            r'[\s\S]{0,200}?<w:t[^>]*>([^<]+)</w:t>'
+        # 3. 按 document.xml 出现顺序，提取每个 footnoteReference 的 w:id 和它后面的圈码
+        # 真实结构：<w:footnoteReference w:id="X" w:customMarkFollows="true"/><w:t ...>圈码</w:t>
+        pat = re.compile(
+            r'<w:footnoteReference\s+w:id="(\d+)"\s+w:customMarkFollows="true"\s*/>'
+            r'\s*(<w:r[^>]*>)?\s*<w:t[^>]*>([^<]+)</w:t>'
         )
-        matches = [(m.group(1), '', m.group(2)) for m in refs_pat.finditer(doc_xml)]
-    print(f"步骤2: 匹配 {len(matches)} 个 footnote-圈码对")
+        matches = pat.findall(doc_xml)
+        if not matches:
+            # 兜底：放宽匹配
+            refs_pat = re.compile(
+                r'<w:footnoteReference\s+w:id="(\d+)"[^>]*/>'
+                r'[\s\S]{0,200}?<w:t[^>]*>([^<]+)</w:t>'
+            )
+            matches = [(m.group(1), '', m.group(2)) for m in refs_pat.finditer(doc_xml)]
+        print(f"步骤2: 匹配 {len(matches)} 个 footnote-圈码对")
 
-    id_list = [m[0] for m in matches]
-    if len(id_list) != len(pages):
-        print(f"  警告: 数量不一致 {len(id_list)} vs {len(pages)}")
+        id_list = [m[0] for m in matches]
+        if len(id_list) != len(pages):
+            raise ValueError(f"脚注数量不一致，停止输出：{len(id_list)} vs {len(pages)}")
 
-    # 4. 按页分组重编号 —— 用 w:id 作 key（每个引用点唯一，不会冲突）
-    id_to_circle = {}
-    page_counter = {}
-    page_groups = {}
-    overflow_pages = []
-    for idx, fid in enumerate(id_list):
-        p = pages[idx] if idx < len(pages) else 0
-        page_counter[p] = page_counter.get(p, 0) + 1
-        new_c = get_circle(page_counter[p])
-        id_to_circle[fid] = new_c
-        page_groups.setdefault(p, []).append(new_c)
-        if page_counter[p] > 20:
-            overflow_pages.append(p)
+        # 4. 按页分组重编号 —— 用 w:id 作 key（每个引用点唯一，不会冲突）
+        id_to_circle = {}
+        page_counter = {}
+        page_groups = {}
+        overflow_pages = []
+        for idx, fid in enumerate(id_list):
+            p = pages[idx] if idx < len(pages) else 0
+            page_counter[p] = page_counter.get(p, 0) + 1
+            new_c = get_circle(page_counter[p])
+            id_to_circle[fid] = new_c
+            page_groups.setdefault(p, []).append(new_c)
+            if page_counter[p] > 20:
+                overflow_pages.append(p)
 
-    print("步骤3: 每页圈码分配:")
-    for p in sorted(page_groups):
-        print(f"  页 {p}: {page_groups[p]}")
+        print("步骤3: 每页圈码分配:")
+        for p in sorted(page_groups):
+            print(f"  页 {p}: {page_groups[p]}")
 
-    if overflow_pages:
-        print(f"\n⚠ 提示: 以下页脚注超过 20 个，已降级为 (n) 形式: {sorted(set(overflow_pages))}")
-        print("  建议：该页脚注过多，可考虑合并部分引用或拆分段落。")
+        if overflow_pages:
+            print(f"\n⚠ 提示: 以下页脚注超过 20 个，已降级为 (n) 形式: {sorted(set(overflow_pages))}")
+            print("  建议：该页脚注过多，可考虑合并部分引用或拆分段落。")
 
-    # 5. 替换 document.xml 里每个 footnoteReference 后的圈码
-    def repl_doc(m):
-        full = m.group(0)
-        fid = m.group(1)
-        old_c = m.group(3)
-        new_c = id_to_circle.get(fid, old_c)
-        return full.replace(f'>{old_c}<', f'>{new_c}<', 1)
-    new_doc_xml = pat.sub(repl_doc, doc_xml)
-    doc_path.write_text(new_doc_xml, encoding="utf-8")
+        # 5. 替换 document.xml 里每个 footnoteReference 后的圈码
+        def repl_doc(m):
+            full = m.group(0)
+            fid = m.group(1)
+            old_c = m.group(3)
+            new_c = id_to_circle.get(fid, old_c)
+            return full.replace(f'>{old_c}<', f'>{new_c}<', 1)
+        new_doc_xml = pat.sub(repl_doc, doc_xml)
+        doc_path.write_text(new_doc_xml, encoding="utf-8")
 
-    # 6. 替换 footnotes.xml：按 <w:footnote w:id="X"> 分块，每块换第一个圈码
-    parts = re.split(r'(<w:footnote\s+w:id="\d+"[^>]*>)', fn_xml)
-    for i in range(1, len(parts), 2):
-        head = parts[i]
-        m_id = re.search(r'w:id="(\d+)"', head)
-        if not m_id:
-            continue
-        fid = m_id.group(1)
-        if i + 1 < len(parts):
-            content = parts[i + 1]
-            replaced = False
-            for old_c in ALL_CIRCLES:
-                if old_c in content:
-                    new_c = id_to_circle.get(fid, old_c)
-                    content = content.replace(old_c, new_c, 1)
-                    replaced = True
-                    break
-            if not replaced:
-                # 数字 fallback（如 36/37/38）
-                m = re.search(r'<w:t[^>]*>(\d+)</w:t>', content)
-                if m:
-                    new_c = id_to_circle.get(fid, m.group(1))
-                    content = content[:m.start()] + re.sub(
-                        r'(<w:t[^>]*>)[^<]*(</w:t>)',
-                        lambda mm: f'{mm.group(1)}{new_c}{mm.group(2)}',
-                        content[m.start():], count=1
-                    )
-            parts[i + 1] = content
-    new_fn_xml = ''.join(parts)
-    fn_path.write_text(new_fn_xml, encoding="utf-8")
+        # 6. 替换 footnotes.xml：按 <w:footnote w:id="X"> 分块，每块换第一个圈码
+        parts = re.split(r'(<w:footnote\s+w:id="\d+"[^>]*>)', fn_xml)
+        for i in range(1, len(parts), 2):
+            head = parts[i]
+            m_id = re.search(r'w:id="(\d+)"', head)
+            if not m_id:
+                continue
+            fid = m_id.group(1)
+            if i + 1 < len(parts):
+                content = parts[i + 1]
+                replaced = False
+                for old_c in ALL_CIRCLES:
+                    if old_c in content:
+                        new_c = id_to_circle.get(fid, old_c)
+                        content = content.replace(old_c, new_c, 1)
+                        replaced = True
+                        break
+                if not replaced:
+                    # 数字 fallback（如 36/37/38）
+                    m = re.search(r'<w:t[^>]*>(\d+)</w:t>', content)
+                    if m:
+                        new_c = id_to_circle.get(fid, m.group(1))
+                        content = content[:m.start()] + re.sub(
+                            r'(<w:t[^>]*>)[^<]*(</w:t>)',
+                            lambda mm: f'{mm.group(1)}{new_c}{mm.group(2)}',
+                            content[m.start():], count=1
+                        )
+                parts[i + 1] = content
+        new_fn_xml = ''.join(parts)
+        fn_path.write_text(new_fn_xml, encoding="utf-8")
 
-    # 7. 重新打包
-    with zipfile.ZipFile(output_docx, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in tmp.rglob("*"):
-            if f.is_file():
-                z.write(f, f.relative_to(tmp).as_posix())
-    shutil.rmtree(tmp)
-    print(f"\n完成: {output_docx}")
+        # 7. 重新打包
+        with zipfile.ZipFile(output_docx, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in tmp.rglob("*"):
+                if f.is_file():
+                    z.write(f, f.relative_to(tmp).as_posix())
+        print(f"\n完成: {output_docx}")
 
 
 if __name__ == "__main__":

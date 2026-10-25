@@ -9,36 +9,56 @@ fetch_text.py — 网页全文抓取与清洗（马理论材料入库用）
   python fetch_text.py --jobs jobs.json
 
 要点（详见 references/sources.md）：
-- 编码按「页面声明 → gb18030 → utf-8」顺序尝试，用乱码计数验证；
+- 编码按显式指定/BOM/有效声明/严格UTF-8/旧编码处理，零乱码计数不替代原页面核对；
   老中文站（marxists.org 等）多为 GB18030，用 gb2312 会破坏"——"等字符。
 - marxists.org 页面提取到文末"注释"区之前截止，不收脚注与页尾导航。
 - 输出 UTF-8 txt，打印字数、乱码计数、首尾预览供人工核验。
 """
 import argparse, json, re, sys, io, html as H
-import requests
+from pathlib import Path
+from urllib.request import Request, urlopen
+from urllib.parse import urlparse
+import codecs
+import tempfile
+import os
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
 
-def pick_encoding(content: bytes, declared: str):
-    """按「声明 → gb18030 → utf-8」试解码，返回 (文本, 实际编码, 乱码数)。"""
+def pick_encoding(content: bytes, declared: str = '', forced: str = None):
+    """Honor explicit encoding; otherwise BOM, reliable declaration, strict UTF-8, legacy."""
+    if forced:
+        text = content.decode(forced, errors='strict')
+        return text, forced, text.count('\ufffd') + text.count('锟斤拷')
+    if content.startswith(codecs.BOM_UTF8):
+        return content.decode('utf-8-sig'), 'utf-8-sig', 0
+    if content.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return content.decode('utf-16'), 'utf-16', 0
+    head = content[:8192].decode('ascii', errors='ignore')
+    meta = re.search(r'<meta\b[^>]*charset\s*=\s*[\'\"]?\s*([\w.-]+)', head, re.I)
     candidates = []
-    if declared and declared.lower() not in ("iso-8859-1", "latin-1", "ascii"):
-        candidates.append(declared)
-    candidates += ["gb18030", "utf-8", "big5"]
-    best = None
+    for enc in (declared, meta.group(1) if meta else None):
+        if enc and enc.strip().lower() not in ('iso-8859-1', 'latin-1', 'ascii'):
+            enc = enc.strip().strip('\'\"')
+            if enc.lower() in ('gb2312', 'gbk', 'gb_2312-80'):
+                enc = 'gb18030'
+            candidates.append(enc)
+    candidates.extend(['utf-8', 'gb18030', 'big5'])
+    seen = set()
     for enc in candidates:
+        if enc.lower() in seen:
+            continue
+        seen.add(enc.lower())
         try:
-            text = content.decode(enc)
+            text = content.decode(enc, errors='strict')
         except (UnicodeDecodeError, LookupError):
             continue
-        bad = text.count("\ufffd") + text.count("锟斤拷")
-        if best is None or bad < best[2]:
-            best = (text, enc, bad)
+        bad = text.count('\ufffd') + text.count('锟斤拷')
         if bad == 0:
-            break
-    return best
+            return text, enc, bad
+    return None
 
 
 def strip_tags_fragment(html_fragment: str) -> str:
@@ -111,33 +131,57 @@ def extract_generic(page: str) -> str:
     return strip_tags_fragment(t)
 
 
-def fetch_one(name: str, url: str, out: str, encoding: str = None) -> dict:
-    r = requests.get(url, headers=UA, timeout=90)
-    r.raise_for_status()
-    declared = encoding or r.headers.get("Content-Type", "").split("charset=")[-1].strip()
-    result = pick_encoding(r.content, declared)
+def fetch_one(name: str, url: str, out: str, encoding: str = None, overwrite=False) -> dict:
+    target = Path(out)
+    if target.exists() and not overwrite:
+        raise FileExistsError(f'输出已存在，未覆盖：{out}；另存或获授权后使用 --overwrite')
+    with urlopen(Request(url, headers=UA), timeout=90) as response:
+        content = response.read()
+        declared = response.headers.get_content_charset() or ''
+        final_url = response.geturl()
+    result = pick_encoding(content, declared, forced=encoding)
     if result is None:
-        raise RuntimeError(f"{name}: 无法解码页面")
+        raise RuntimeError(f'{name}: 无法可靠解码，请检查原页面或指定 --encoding')
     text, enc, bad = result
+    host = (urlparse(final_url).hostname or '').lower()
+    body = extract_marxists(text) if host == 'marxists.org' or host.endswith('.marxists.org') else extract_generic(text)
+    final_bad = body.count('\ufffd') + body.count('锟斤拷')
+    if not body.strip() or final_bad:
+        raise ValueError(f'{name}: 正文为空或有疑似乱码，未写入输出')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp = tempfile.mkstemp(prefix='.' + target.name + '-', suffix='.tmp', dir=target.parent)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as stream:
+            stream.write(body + '\n')
+        publish_file(temp, target, overwrite)
+    finally:
+        Path(temp).unlink(missing_ok=True)
+    return {'name': name, 'url': final_url, 'out': str(target), 'encoding': enc,
+            'chars': len(body), 'garbled': final_bad,
+            'head': body[:60].replace('\n', ' '), 'tail': body[-60:].replace('\n', ' ')}
 
-    if "marxists.org" in url:
-        body = extract_marxists(text)
-    else:
-        body = extract_generic(text)
 
+
+def publish_file(temp_path, out_path, overwrite=False):
+    """Publish only a completed temporary file; protect existing results by default."""
+    from datetime import datetime
     import os
-    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-    with open(out, "w", encoding="utf-8") as f:
-        f.write(body + "\n")
-
-    final_bad = body.count("\ufffd") + body.count("锟斤拷")
-    return {
-        "name": name, "url": url, "out": out, "encoding": enc,
-        "chars": len(body),
-        "garbled": final_bad,
-        "head": body[:60].replace("\n", " "),
-        "tail": body[-60:].replace("\n", " "),
-    }
+    import shutil
+    target = Path(out_path)
+    temp = Path(temp_path)
+    if overwrite:
+        if target.exists():
+            stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+            backup = target.with_name(target.name + '.bak.' + stamp)
+            shutil.copy2(target, backup)
+        os.replace(temp, target)
+    else:
+        # Same directory/filesystem: exclusive link fails if another writer created target.
+        if os.name == 'nt':
+            os.rename(temp, target)
+        else:
+            os.link(temp, target)
+            temp.unlink()
 
 
 def report(r: dict):
@@ -155,6 +199,7 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--encoding", default=None, help="强制指定编码（默认自动探测）")
     ap.add_argument("--jobs", help="批量：JSON 文件，元素为 {name,url,out[,encoding]}")
+    ap.add_argument("--overwrite", action="store_true", help="已获授权覆盖；先保存原文件备份")
     args = ap.parse_args()
 
     if args.jobs:
@@ -167,7 +212,7 @@ def main():
     ok, fail = 0, 0
     for j in jobs:
         try:
-            report(fetch_one(j["name"], j["url"], j["out"], j.get("encoding")))
+            report(fetch_one(j["name"], j["url"], j["out"], j.get("encoding"), overwrite=args.overwrite))
             ok += 1
         except Exception as e:
             print(f"[FAIL] {j['name']}: {e}")
