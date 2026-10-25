@@ -1,5 +1,8 @@
 # 课程/学位论文排版
 
+另有独立预置 **大学本科毕业论文格式一**：先读 [规则与输入说明](references/undergraduate-01.md)，通过 `build_docx.py --preset undergraduate-01 --meta 本地元信息.json` 选择；本页其余说明为原通用格式。
+
+
 本目录是 marx-paper-skills 的排版模块，入口为 SKILL.md；完整系列及安装同步方式见仓库根 README.md。
 
 默认以 Pandoc 脚注生成 Word，采用圈码、每页重编号、宋体小四和1.5倍行距。具体学校模板与用户本次要求优先。圈码是本工作流偏好，不是所有学校或国标的统一要求。

@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
-  "release": "2026.10.25",
+  "release": "2026.10.25.undergraduate-01",
   "skills": [
     {
       "name": "marx-paper",
       "required_files": [
         "SKILL.md",
         "agents/openai.yaml",
-        "references/workflow-contract.md"
+        "references/workflow-contract.md",
+        "references/format-presets.json"
       ]
     },
     {
@@ -86,7 +87,10 @@
         "scripts/build_docx.py",
         "scripts/footnote_circle_marks.py",
         "scripts/render_docx.py",
-        "scripts/renumber_footnotes_per_page.py"
+        "scripts/renumber_footnotes_per_page.py",
+        "references/undergraduate-01.md",
+        "presets/undergraduate-01.json",
+        "scripts/build_undergraduate_docx.py"
       ]
     },
     {

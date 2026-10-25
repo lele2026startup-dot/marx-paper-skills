@@ -215,5 +215,22 @@ if __name__ == "__main__":
     parser.add_argument("--no-circle", action="store_true",
                         help="不用圈码和每页重编号，pandoc 默认数字编号（用户手动调）")
     parser.add_argument("--overwrite", action="store_true", help="已获授权覆盖，保留旧文件备份")
+    parser.add_argument('--preset', choices=('generic', 'undergraduate-01'), default='generic', help='通用格式或大学本科毕业论文格式一')
+    parser.add_argument('--meta', help='本科格式一本地题名、摘要、关键词等JSON')
+    parser.add_argument('--blind', action='store_true', help='本科格式一匿名评审稿')
+    parser.add_argument('--draft', action='store_true', help='本科格式一待Word验收稿')
+    parser.add_argument('--cover-docx', help='本科格式一本地正式封面')
+    parser.add_argument('--pdf', help='本科格式一同时导出验收PDF')
     args = parser.parse_args()
-    build(args.md, args.docx, use_circle=not args.no_circle, overwrite=args.overwrite)
+    if args.preset == 'undergraduate-01':
+        if not args.meta:
+            parser.error('本科格式一需要 --meta')
+        if args.no_circle:
+            parser.error('本科格式一规定逐页圈码；--no-circle仅用于通用格式')
+        from build_undergraduate_docx import build as build_undergraduate
+        build_undergraduate(args.md, args.meta, args.docx, blind=args.blind, overwrite=args.overwrite,
+                            draft=args.draft, cover_docx=args.cover_docx, pdf_path=args.pdf)
+    else:
+        if args.meta or args.blind or args.draft or args.cover_docx or args.pdf:
+            parser.error('--meta/--blind/--draft/--cover-docx/--pdf仅用于本科格式一')
+        build(args.md, args.docx, use_circle=not args.no_circle, overwrite=args.overwrite)

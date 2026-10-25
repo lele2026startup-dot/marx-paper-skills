@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "presets": [
+    {
+      "id": "generic",
+      "name": "课程／学位论文通用格式",
+      "skill": "marx-paper-thesis-format",
+      "guide": "README.md",
+      "summary": "单栏、宋体小四、默认1.5倍行距、逐页圈码脚注"
+    },
+    {
+      "id": "journal",
+      "name": "期刊／会议投稿格式",
+      "skill": "marx-paper-journal-format",
+      "guide": "references/journal-endnotes.md",
+      "summary": "默认双栏、五号正文、真尾注与重复引用交叉引用"
+    },
+    {
+      "id": "undergraduate-01",
+      "name": "大学本科毕业论文格式一",
+      "aliases": ["本科格式一", "本科毕业论文规范版"],
+      "skill": "marx-paper-thesis-format",
+      "guide": "references/undergraduate-01.md",
+      "profile": "presets/undergraduate-01.json",
+      "summary": "中英文摘要、自动目录、正文1.25倍、分章分节、页眉右侧分段页码、正式／盲审稿"
+    }
+  ]
+}

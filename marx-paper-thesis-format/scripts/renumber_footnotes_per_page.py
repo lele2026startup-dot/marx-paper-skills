@@ -80,14 +80,14 @@ def renumber_docx(input_docx, output_docx):
         # 3. 按 document.xml 出现顺序，提取每个 footnoteReference 的 w:id 和它后面的圈码
         # 真实结构：<w:footnoteReference w:id="X" w:customMarkFollows="true"/><w:t ...>圈码</w:t>
         pat = re.compile(
-            r'<w:footnoteReference\s+w:id="(\d+)"\s+w:customMarkFollows="true"\s*/>'
+            r'<w:footnoteReference\b(?=[^>]*\bw:id="(\d+)")(?=[^>]*\bw:customMarkFollows="(?:true|1)")[^>]*/>'
             r'\s*(<w:r[^>]*>)?\s*<w:t[^>]*>([^<]+)</w:t>'
         )
         matches = pat.findall(doc_xml)
         if not matches:
             # 兜底：放宽匹配
             refs_pat = re.compile(
-                r'<w:footnoteReference\s+w:id="(\d+)"[^>]*/>'
+                r'<w:footnoteReference\b(?=[^>]*\bw:id="(\d+)")[^>]*/>'
                 r'[\s\S]{0,200}?<w:t[^>]*>([^<]+)</w:t>'
             )
             matches = [(m.group(1), '', m.group(2)) for m in refs_pat.finditer(doc_xml)]

@@ -1,0 +1,20 @@
+{
+  "id": "undergraduate-01",
+  "name": "大学本科毕业论文格式一",
+  "aliases": ["本科格式一", "本科毕业论文规范版"],
+  "citation_standard": "GB/T 7714-2015（按该预置依据文件指定）",
+  "page": {"width_cm": 21, "height_cm": 29.7, "top_cm": 2.54, "bottom_cm": 2.54, "left_cm": 3.18, "right_cm": 3.18},
+  "body": {"font_cn": "宋体", "font_latin": "Times New Roman", "size_pt": 12, "line_spacing": 1.25, "first_line_chars": 2, "snap_to_grid": false},
+  "heading": {"size_pt": 15, "subordinate_size_pt": 12, "font_cn": "黑体", "line_spacing": 1.5, "space_after_pt": 11},
+  "keywords": {"gap_lines": 1, "min_count": 3, "max_count": 5},
+  "bibliography": {"size_pt": 10.5, "line_spacing": 1.25, "hanging_chars": 2, "snap_to_grid": true},
+  "page_number": {"front": "upperRoman", "body": "decimal", "position": "header_right", "size_pt": 10.5},
+  "content_checks": {"body_min_chars": 10000, "reference_min_count": 15, "title_max_chars": 20},
+  "needs_confirmation": [
+    "未提供统一封面样张时生成中性封面；正式提交应使用用户本地封面模板",
+    "页边距及装订线原文未给全，当前沿用通用默认值，可在本地meta中覆盖",
+    "正文各级标题未完整列出字号；一级暂沿用标题1规格，二三级采用可覆盖的实现默认",
+    "关键词间隔原文有一行与二行两种表述，当前采用关键词专条的一行，可在本地覆盖",
+    "参考文献续行缩进未给具体字符数，当前默认两字；定位页与出版范围须按实际模板核对"
+  ]
+}
