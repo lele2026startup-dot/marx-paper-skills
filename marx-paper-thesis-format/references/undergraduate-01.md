@@ -69,4 +69,4 @@ python scripts/build_docx.py body.md blind.docx --preset undergraduate-01 --meta
 
 1. 读取新原始要求，按编号新增匿名规则文件和参考说明，保留旧编号和默认行为。
 2. 在总入口 `marx-paper/references/format-presets.json` 登记唯一ID、可说出的中文名、路由、指南和参数文件；一个预置的正式／盲审是变体，不另算一套。
-3. 新增真实差异的验证，更新维护清单，再依源仓库→Codex运行副本→GitHub流程同步。公共文件不得携带学校／学院身份；原始材料始终留在任务本地。
+3. 本地使用时，将新增预置安装到所用智能体的skills目录；向项目贡献时补充验证、更新安装清单，并按开发与贡献指南提交。公共文件不携带私人学校／学院身份；原始材料留在任务本地。
